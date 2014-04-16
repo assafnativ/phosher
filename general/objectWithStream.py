@@ -6,6 +6,7 @@ class ObjectWithStream(object):
     def __init__(self, data=None):
         if None != data:
             self.stream = cStringIO.StringIO(data)
+            self.stream.seek(0)
         else:
             self.stream = cStringIO.StringIO()
         self.offsetsHistory = []

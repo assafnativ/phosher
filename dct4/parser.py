@@ -99,12 +99,12 @@ class DCT4(ObjectWithStreamBigEndian):
         if len(data) < 0x100:
             data = file(data, 'rb').read()
         self.rawData = data
-        self.stream = StringIO(data)
+        ObjectWithStreamBigEndian.__init__(self, data)
         self.WORDS_PERM_TABLE   = WORDS_PERM_TABLE
         self.INVERS_PERM_TABLE  = INVERS_PERM_TABLE
         self.decode()
 
-    def cryptoInternal( word, addr ):
+    def cryptoInternal( self, word, addr ):
         for mask, xorVal in self.TABLE:
             if mask == (mask & (addr)):
                 word ^= xorVal
@@ -117,60 +117,65 @@ class DCT4(ObjectWithStreamBigEndian):
 
     def decryptChunk( self, data, base=0x1000084 ):
         result  = ObjectWithStreamBigEndian()
-        data = map(ord, data)
-        dataLength = len(data)
-        while data.tell() < dataLength:
-            addr = base + pos
+        addr = base
+        endAddr = base + len(data)
+        while addr < endAddr:
             word = data.readUInt16()
-            word = self.cryptoInternal(word, base + data.tell())
+            word = self.cryptoInternal(word, addr)
             word = self.WORDS_PERM_TABLE[word]
             result.writeUInt16(word)
+            addr += 2
         return result
 
     def encryptChunk( self, data, base=0x1000084 ):
         result  = ObjectWithStreamBigEndian()
-        data = map(ord, data)
-        dataLength = len(data)
-        while data.tell() < dataLength:
+        addr = base
+        endAddr = base + len(data)
+        while addr < endAddr:
             word = data.readUInt16()
             word ^= 0x8a1b
             word = self.INVERS_PERM_TABLE[word]
-            word = cryptoInternal( word, base + data.tell() )
+            word = self.cryptoInternal( word, addr )
             result.writeUInt16(word)
+            addr += 2
         return result
 
     def xorWordToData( self, data, xorVal ):
         result = ObjectWithStreamBigEndian()
         dataLength = len(data)
-        while dataLength < data.tell():
+        while dataLength > data.tell():
             result.writeUInt16(data.readUInt16() ^ xorVal)
-        if len(str1) < len(str2):
-            str1, str2 = str2, str1
-        return ''.join([chr(ord(x) ^ ord(y)) for x, y in itertools.izip(str1, itertools.cycle(str2))])
+        return result
 
     def decrypt( self, data, base=0x1000084 ):
-        data = decryptChunk(data, base)
+        if isinstance(data, str):
+            data = ObjectWithStreamBigEndian(data)
+        data = self.decryptChunk(data, base)
+        data.seek(0)
         xorVal = data.readUInt16() ^ 0xffff
+        data.seek(0)
         data = self.xorWordToData(data, xorVal)
         return data
 
-    def encrypt( self, data ):
-        return encryptChunk(data) 
+    def encrypt( self, data, base=0x1000084 ):
+        if isinstance(data, str):
+            data = ObjectWithStreamBigEndian(data)
+        return self.encryptChunk(data, base=base) 
 
     def parseTokens(self, data):
-        numOfTokens = self.readUInt32()
-        printIfVerbose( "Decoding %d tokens (Total size 0x%x)" % (numOfTokens, sectionLength), self.isVerbose )
+        numOfTokens = data.readUInt32()
+        printIfVerbose( "Decoding %d tokens (Total size 0x%x)" % (numOfTokens, len(data)), self.isVerbose )
         tokens = []
         length = len(data)
         while data.tell() < length:
-            tokenType = self.readUInt8()
-            tokenLen = self.readUInt8()
-            tokens.append((tokenType, self.read(tokenLen)))
+            tokenType = data.readUInt8()
+            tokenLen = data.readUInt8()
+            tokens.append((tokenType, data.read(tokenLen)))
         if len(tokens) != numOfTokens:
             raise Exception("Tokens parssing error")
         return tokens
 
-    def parseDataBlob( self, data ):
+    def parseDataBlob( self, data, dataCheck ):
         # Just checks the bytesSum
         length = len(data)
         chunks = []
@@ -189,19 +194,22 @@ class DCT4(ObjectWithStreamBigEndian):
         length = len(self)
         blobs = []
         isBlobEncrypted = False
+        printIfVerbose("Parsing file of length %x" % length, self.isVerbose)
         while self.tell() < length:
+            pos = self.tell()
             blobType = self.readUInt8()
             if 0xA2 == blobType:
                 blobLength = self.readUInt32()
                 blobData = ObjectWithStreamBigEndian(self.read(blobLength))
                 blobData.seek(0)
+                printIfVerbose("Loading Tokens blob (%x) of length %x starting at %x" % (blobType, blobLength, pos), self.isVerbose)
                 tokens = self.parseTokens(blobData)
                 blobs.append((blobType, tokens))
             elif 0x14 == blobType:
                 self.pushOffset()
                 address = self.readUInt32()
                 dataCheck = self.readUInt8()
-                length = unpack('>L', '\x00' + self.read(3))[0]
+                blobLength = unpack('>L', '\x00' + self.read(3))[0]
                 self.popOffset()
                 header = self.read(8)
                 headerSum = sum([ord(x) for x in header]) & 0xff
@@ -209,10 +217,11 @@ class DCT4(ObjectWithStreamBigEndian):
                 headerCheck = self.readUInt8()
                 if headerSum != headerCheck:
                     raise Exception("Header checksum mismatch")
-                blobData = ObjectWithStreamBigEndian(self.read(length))
+                printIfVerbose("Loading DATA blob (%x) of length %x starting at %x" % (blobType, blobLength, pos), self.isVerbose)
+                blobData = ObjectWithStreamBigEndian(self.read(blobLength))
                 blobData.seek(0)
                 data = self.parseDataBlob(blobData, dataCheck)
-                blobs.append((blobType, (address, address + length, data)))
+                blobs.append((blobType, (address, address + blobLength, data)))
                 isBlobEncrypted = True
             else:
                 raise Exception("Unknown blob type %x" % blobType)
@@ -233,14 +242,21 @@ class DCT4(ObjectWithStreamBigEndian):
             encryptedDataEnd    = min(self.endAddress,  self.ENCRYPTED_RANGE[1])
             encryptedDataOffset     = encryptedDataStart    - self.address
             encryptedDataEndOffset  = encryptedDataEnd      - self.address
-            encryptedData = ObjectWithStreamBigEndian(rawData.readFromTo(encryptedDataStart, encryptedDataEnd))
+            encryptedDataLength     = encryptedDataEnd - encryptedDataStart
             self.plain = ObjectWithStreamBigEndian()
+            printIfVerbose("Data chunk from %x to %x Decrypting data from %x to %x" % (
+                self.address, 
+                self.endAddress,
+                encryptedDataStart,
+                encryptedDataEnd), self.isVerbose)
             rawData.seek(0)
-            if encryptedDataStart > self.address:
-                self.plain.write( rawData.read(encryptedDataStart) )
-            self.plain.write( self.decrypt(encryptedData, encryptedDataStart) )
+            if encryptedDataOffset > 0:
+                self.plain.write( rawData.read(encryptedDataOffset) )
+            decryptedData = self.decrypt(rawData.read(encryptedDataLength), encryptedDataStart)
+            if len(decryptedData) != encryptedDataLength:
+                raise Exception("Decrypt returned wrong number of bytes")
+            self.plain.write( decryptedData.getRawData() )
             if encryptedDataEnd < self.endAddress:
-                rawData.seek(encryptedDataEndOffset)
                 self.plain.write( rawData.read() )
         else:
             self.plain = rawData
@@ -258,13 +274,15 @@ class DCT4(ObjectWithStreamBigEndian):
                     raise Exception("Overlapped blobs!")
                 elif result.tell() < offset:
                     result.write('\xff' * (offset - result.tell()))
-                result.write(data)
-        return (address, result)
+                result.write(data.getRawData())
+        return (base, result)
 
     def createDataBlob(self, data, addr):
-        data.seek(0)
-        rawData = data.getRawData()
-        bytesSum = sum([ord(x) for x in rawData])
+        if isinstance(data, (ObjectWithStream, ObjectWithStreamBigEndian)):
+            data = data.getRawData()
+        if 0 == len(data):
+            raise Exception("Can't make a chunk of length zero")
+        bytesSum = sum([ord(x) for x in data])
         bytesSum &= 0xff
         bytesSum ^= 0xff
         dataCheck = (1 + bytesSum) & 0xff
@@ -272,19 +290,26 @@ class DCT4(ObjectWithStreamBigEndian):
         result.writeUInt32(addr)
         result.writeUInt8(dataCheck)
         lengthBin = pack('>L', len(data))
-        result.wrtie(lengthBin[1:])
+        result.write(lengthBin[1:])
         rawHeader = result.getRawData()
         headerSum = sum([ord(x) for x in rawHeader]) & 0xff
         result.writeUInt8(headerSum ^ 0xff)
-        result.write(rawData)
+        result.write(data)
         result.seek(0)
         return result
 
     def tokensToStream(self):
+        tokens = None
+        for blobType, blobData in self.blobs:
+            if 0xa2 == blobType:
+                tokens = blobData
+                break
+        if None == tokens:
+            raise Exception("Instance doesn't have tokens")
         result = ObjectWithStreamBigEndian()
-        result.writeUInt32(len(self.tokens))
-        printIfVerbose( "Writting %d tokens" % len(self.tokens), self.isVerbose )
-        for tokenId, tokenData in self.tokens:
+        result.writeUInt32(len(tokens))
+        printIfVerbose( "Writting %d tokens" % len(tokens), self.isVerbose )
+        for tokenId, tokenData in tokens:
             printIfVerbose( "Writting token id=0x%x of 0x%x bytes" % (tokenId, len(tokenData)), self.isVerbose )
             result.writeUInt8(tokenId)
             result.writeUInt8(len(tokenData))
@@ -301,48 +326,32 @@ class DCT4(ObjectWithStreamBigEndian):
                 tokensStream = self.tokensToStream()
                 result.writeUInt32(len(tokensStream))
                 result.write(tokensStream.read())
-            if 0x14 == blobType:
+            elif 0x14 == blobType:
                 address, endAddress, _ = blobData
-                plain = ObjectWithStreamBigEndian(
-                        self.plain.readFromTo(address - self.address, endAddress - self.address))
+                plain = self.plain.readFromTo(address - self.address, endAddress - self.address)
                 if address < self.address or address > self.endAddress:
                     raise Exception("Data out of range")
+                if 0 == len(plain):
+                    raise Exception("No plain data!")
                 if address < self.ENCRYPTED_RANGE[1] and endAddress > self.ENCRYPTED_RANGE[0]:
                     encryptedDataStart  = max(address,     self.ENCRYPTED_RANGE[0])
                     encryptedDataEnd    = min(endAddress,  self.ENCRYPTED_RANGE[1])
                     encryptedDataOffset     = encryptedDataStart    - address
                     encryptedDataEndOffset  = encryptedDataEnd      - address
-                    dataToEncrypt = ObjectWithStreamBigEndian(plain.readFromTo(encryptedDataStart, encryptedDataEnd))
-                    dataToEncrypt.seek(0)
+                    encryptedDataLength     = encryptedDataEnd - encryptedDataStart
                     dataToWrite = ObjectWithStreamBigEndian()
-                    plain.seek(0)
-                    if encryptedDataStart > address:
-                        dataToWrite.write(plain.read(encryptedDataOffset))
-                    dataToWrite.write(self.encrypt(dataToEncrypt), encryptedDataStart)
+                    if encryptedDataOffset > 0:
+                        dataToWrite.write(plain[:encryptedDataOffset])
+                    dataToWrite.write(self.encrypt(plain[encryptedDataOffset:encryptedDataEndOffset], encryptedDataStart).getRawData())
                     if encryptedDataEnd < endAddress:
-                        plain.seek(encryptedDataEndOffset)
-                        dataToWrite.write(plain.read())
+                        dataToWrite.write(plain[encryptedDataEndOffset:])
                 else:
-                    dataToWrite = data
+                    dataToWrite = plain
                 result.write(self.createDataBlob(dataToWrite, address).getRawData())
             else:
                 raise Exception("Don't know how to encode blob of type %x" % blobType)
 
-        # Write the data sections
-        for i, (addr, sectionData) in enumerate(self.sections):
-            sectionLength = len(sectionData)
-            bytesLeft = sectionLength
-            offset = 0
-            while sectionData.tell() < sectionLength:
-                chunkLength = 0x10000 - (offset % 0x10000)
-                if bytesLeft < chunkLength:
-                    chunkLength = bytesLeft
-                self.createChunk(sectionData, addr, offset, chunkLength)
-                printIfVerbose( "Writting chunk 0x%x, offsets 0x%x to 0x%x of length 0x%x" % (i, offset, end, sectionLength), self.isVerbose )
-                # Get ready for the next section
-                addr += chunkLength
-                offset += chunkLength
-                bytesLeft -= chunkLength
+        result.seek(0)
         return result
     
 
@@ -391,7 +400,7 @@ def encodeMcusw( outputFileName, plain, tokens=DEFAULT_TOKENS, sections=DEFAULT_
 # ...
 
 
-def checkPlainChecksum( plain, isVerbose=True, base=CODE_BASE ):
+def checkPlainChecksum( plain, isVerbose=True, base=0x1000084 ):
     currentChecksum = unpack('>H', plain[0x26:0x26+2])[0]
     start = unpack('>L', plain[0x78:0x78+4])[0]
     end = unpack('>L', plain[0xfc:0xfc+4])[0] + 1
@@ -406,7 +415,7 @@ def checkPlainChecksum( plain, isVerbose=True, base=CODE_BASE ):
             print 'Checksum ok 0x%04x' % checksum
     return checksum
 
-def fixChecksum( plain, base=CODE_BASE, doResetCodeEnd=True ):
+def fixChecksum( plain, base=0x1000084, doResetCodeEnd=True ):
     end = unpack('>L', plain[0xfc:0xfc+4])[0]
     if doResetCodeEnd and (end != (len(plain) - 1 + base)):
         newEnd = len(plain) - 1 + base
@@ -417,7 +426,7 @@ def fixChecksum( plain, base=CODE_BASE, doResetCodeEnd=True ):
     plain = plain[:0x26] + pack('>H', checksum) + plain[0x26+2:]
     return plain
 
-def fixSHA1( plain, SHA1TableOffset, base=CODE_BASE, doResetCodeEnd=True ):
+def fixSHA1( plain, SHA1TableOffset, base=0x1000084, doResetCodeEnd=True ):
     startAddr, endAddr = unpack('>LL', plain[SHA1TableOffset:SHA1TableOffset+8])
     if doResetCodeEnd:
         codeEndAddr = unpack('>L', plain[0xfc:0xfc+4])[0]
