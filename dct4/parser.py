@@ -9,9 +9,10 @@ from .inversWordsPermTable import *
 from cStringIO import StringIO
 from struct import unpack, pack
 from hashlib import sha1
+import scipy
 
 class DCT4(ObjectWithStreamBigEndian):
-    TABLE = [ \
+    XOR_TABLE1 = [ \
         (0x000140, 0x1000), (0x000220, 0x52a1), 
         (0x000480, 0x1221), (0x000600, 0xb928),
         (0x000810, 0x5221), (0x000840, 0x1220), 
@@ -25,10 +26,19 @@ class DCT4(ObjectWithStreamBigEndian):
         (0x020200, 0x53a5), (0x040040, 0xa91a), 
         (0x044000, 0x1b20), (0x080100, 0xa918),
         (0x800000, 0xb908) ]
-    XOR_TABLE = [ \
-        0x0fae, 0x3e7f, 0xc99f, 0xd6f7, 0xa71b, 0x14c4, 0x52a5, 0xcbb1, \
-        0x4285, 0xefdf, 0xdff7, 0x5080, 0xee9f, 0x0000, 0x8432, 0x5221, \
-        0x4084, 0xa91a, 0x56e7, 0xb93a, 0x5b21, 0xa818, 0x0000, 0xefdf ]
+    XOR_TABLE2 = [ \
+        (0x0000002, 0x0fae), (0x0000004, 0x3e7f), 
+        (0x0000008, 0xc99f), (0x0000010, 0xd6f7), 
+        (0x0000020, 0xa71b), (0x0000040, 0x14c4), 
+        (0x0000080, 0x52a5), (0x0000100, 0xcbb1),
+        (0x0000200, 0x4285), (0x0000400, 0xefdf), 
+        (0x0000800, 0xdff7), (0x0001000, 0x5080), 
+        (0x0002000, 0xee9f), (0x0004000, 0x0000), 
+        (0x0008000, 0x8432), (0x0010000, 0x5221),
+        (0x0020000, 0x4084), (0x0040000, 0xa91a), 
+        (0x0080000, 0x56e7), (0x0100000, 0xb93a), 
+        (0x0200000, 0x5b21), (0x0400000, 0xa818), 
+        (0x0800000, 0x0000), (0x1000000, 0xefdf) ]
     ENCRYPTED_RANGE = (0x1000084, 0x2000000)
 
     def __init__(self, data, isVerbose=False):
@@ -37,67 +47,48 @@ class DCT4(ObjectWithStreamBigEndian):
             data = file(data, 'rb').read()
         self.rawData = data
         ObjectWithStreamBigEndian.__init__(self, data)
-        self.WORDS_PERM_TABLE   = WORDS_PERM_TABLE
-        self.INVERS_PERM_TABLE  = INVERS_PERM_TABLE
+        self.WORDS_PERM_TABLE   = scipy.array(WORDS_PERM_TABLE, scipy.uint16)
+        self.INVERS_PERM_TABLE  = scipy.array(INVERS_PERM_TABLE, scipy.uint16)
         self.decode()
 
-    def cryptoInternal( self, word, addr ):
-        for mask, xorVal in self.TABLE:
-            if mask == (mask & (addr)):
-                word ^= xorVal
-        bit = 1
-        for i in xrange(len(self.XOR_TABLE)):
-            if addr & (1 << bit):
-                word ^= self.XOR_TABLE[i]
-            bit = (bit + 1) & 0x1f
-        return word
-
-    def decryptChunk( self, data, base=0x1000084 ):
-        result  = ObjectWithStreamBigEndian()
-        addr = base
-        endAddr = base + len(data)
-        while addr < endAddr:
-            word = data.readUInt16()
-            word = self.cryptoInternal(word, addr)
-            word = self.WORDS_PERM_TABLE[word]
-            result.writeUInt16(word)
-            addr += 2
-        return result
-
-    def encryptChunk( self, data, base=0x1000084 ):
-        result  = ObjectWithStreamBigEndian()
-        addr = base
-        endAddr = base + len(data)
-        while addr < endAddr:
-            word = data.readUInt16()
-            word ^= 0x8a1b
-            word = self.INVERS_PERM_TABLE[word]
-            word = self.cryptoInternal( word, addr )
-            result.writeUInt16(word)
-            addr += 2
-        return result
-
-    def xorWordToData( self, data, xorVal ):
-        result = ObjectWithStreamBigEndian()
-        dataLength = len(data)
-        while dataLength > data.tell():
-            result.writeUInt16(data.readUInt16() ^ xorVal)
-        return result
-
-    def decrypt( self, data, base=0x1000084 ):
-        if isinstance(data, str):
-            data = ObjectWithStreamBigEndian(data)
-        data = self.decryptChunk(data, base)
-        data.seek(0)
-        xorVal = data.readUInt16() ^ 0xffff
-        data.seek(0)
-        data = self.xorWordToData(data, xorVal)
+    def cryptoInternal(self, data, base):
+        addresses = scipy.array(range(base, base + (len(data) * 2), 2), scipy.uint32)
+        for mask, xorVal in self.XOR_TABLE1:
+            data = scipy.where((addresses & mask) == mask, data ^ xorVal, data)
+        for mask, xorVal in self.XOR_TABLE2:
+            data = scipy.where((addresses & mask) != 0,    data ^ xorVal, data)
         return data
 
+    def decryptChunk( self, data, base=0x1000084 ):
+        data = self.cryptoInternal(data, base)
+        data = self.WORDS_PERM_TABLE[data]
+        xorVal = data[0] ^ 0xffff
+        data ^= xorVal
+        return data
+
+    def encryptChunk( self, data, base=0x1000084 ):
+        data ^= 0x8a1b
+        data = self.INVERS_PERM_TABLE[data]
+        data = self.cryptoInternal(data, base)
+        return data
+
+    def decrypt( self, data, base=0x1000084 ):
+        if isinstance(data, (ObjectWithStreamBigEndian, ObjectWithStream)):
+            data = data.getRawData()
+        data = scipy.fromstring(data, scipy.uint16)
+        data.byteswap(True)
+        data = self.decryptChunk(data, base)
+        data.byteswap(True)
+        return data.tostring()
+
     def encrypt( self, data, base=0x1000084 ):
-        if isinstance(data, str):
-            data = ObjectWithStreamBigEndian(data)
-        return self.encryptChunk(data, base=base) 
+        if isinstance(data, (ObjectWithStreamBigEndian, ObjectWithStream)):
+            data = data.getRawData()
+        data = scipy.fromstring(data, scipy.uint16)
+        data.byteswap(True)
+        data = self.encryptChunk(data, base=base)
+        data.byteswap(True)
+        return data
 
     def parseTokens(self, data):
         numOfTokens = data.readUInt32()
@@ -192,7 +183,7 @@ class DCT4(ObjectWithStreamBigEndian):
             decryptedData = self.decrypt(rawData.read(encryptedDataLength), encryptedDataStart)
             if len(decryptedData) != encryptedDataLength:
                 raise Exception("Decrypt returned wrong number of bytes")
-            self.plain.write( decryptedData.getRawData() )
+            self.plain.write( decryptedData )
             if encryptedDataEnd < self.endAddress:
                 self.plain.write( rawData.read() )
         else:
@@ -279,7 +270,7 @@ class DCT4(ObjectWithStreamBigEndian):
                     dataToWrite = ObjectWithStreamBigEndian()
                     if encryptedDataOffset > 0:
                         dataToWrite.write(plain[:encryptedDataOffset])
-                    dataToWrite.write(self.encrypt(plain[encryptedDataOffset:encryptedDataEndOffset], encryptedDataStart).getRawData())
+                    dataToWrite.write(self.encrypt(plain[encryptedDataOffset:encryptedDataEndOffset], encryptedDataStart))
                     if encryptedDataEnd < endAddress:
                         dataToWrite.write(plain[encryptedDataEndOffset:])
                 else:
