@@ -40,13 +40,16 @@ class RSA(object):
                 key = key[::-1]
                 key = int(key.encode('hex'), 16)
                 isKey = True
-                for prime in [2, 3, 5, 7, 11, 13, 17, 19, 0x10001]:
+                for prime in [2, 3, 5, 7, 11, 13, 17, 19, 29, 53, 0x10001]:
                     if 0 == (key % prime):
                         # Too easy to break, very unlikly
                         isKey = False
                         break
                 if isKey:
-                    keys.append(key)
+                    # Just one more check
+                    hexKey = '%x' key
+                    if hexKey.count('0') < (len(hexKey) / 4):
+                        keys.append(key)
                 pos = self.findOneOf(data, pos + 1, headers)
         return keys
 

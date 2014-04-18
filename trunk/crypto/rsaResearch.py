@@ -1,12 +1,12 @@
 
+from ..general.utile import printIfVerbose
 from glob import glob
 from fractions import gcd
 import math
 import gmpy2
 
-
 class rsaResearch(object):
-    def check_small_primes(keys, time_per_key=5):
+    def checkSmallPrimes(self, keys, time_per_key=5):
         if not isinstance(keys, (tuple, list)):
             keys = [keys]
         c = 10
@@ -26,7 +26,7 @@ class rsaResearch(object):
                 a2 = (a2 ** 2 + c) % key
                 a2 = (a2 ** 2 + c) % key
 
-    def gcd_attack(keys, primes=None):
+    def gcdAttack(self, keys, primes=None):
         if None == primes:
             primes = []
         all_keys = 1
@@ -39,9 +39,9 @@ class rsaResearch(object):
         if 1 != gcd_result:
             print 'GCD with primes', gcd_result
         mid = len(keys) // 2
-        gcd_attack_two_groups(keys[:mid], keys[mid:])
+        self.gcdAttackTwoGroups(keys[:mid], keys[mid:])
 
-    def gcd_attack_two_groups(keys1, keys2):
+    def gcdAttackTwoGroups(self, keys1, keys2):
         if len(keys1) == 0 or len(keys2) == 0:
             return
         all_keys1 = 1
@@ -54,11 +54,11 @@ class rsaResearch(object):
         if 1 != gcd_result:
             print 'GCD of', gcd_result, 'found!!!'
         mid = len(keys1) // 2
-        gcd_attack_two_groups(keys1[:mid], keys1[mid:])
+        self.gcdAttackTwoGroups(keys1[:mid], keys1[mid:])
         mid = len(keys2) // 2
-        gcd_attack_two_groups(keys2[:mid], keys2[mid:])
+        self.gcdAttackTwoGroups(keys2[:mid], keys2[mid:])
 
-    def check_p_q_distance(keys):
+    def checkPQDistance(self, keys):
         if not isinstance(keys, (tuple, list)):
             keys = [keys]
         ctx = gmpy2.get_context()
@@ -78,7 +78,7 @@ class rsaResearch(object):
             if bits < 480:
                 print '%d Has p, q distance of %d bits' % (key, bits)
 
-    def entropy(data):
+    def entropy(self, data):
         data = [ord(x) for x in data]
         alphabet = list(Set(data))
         length = len(data)
@@ -89,7 +89,7 @@ class rsaResearch(object):
         ent = -ent
         return int(math.ceil(ent))
 
-    def find_block_of_random(data, block_size=0x80):
+    def findBlockOfRandom(self, data, block_size=0x80):
         result = []
         if len(data) < 0x100:
             data = file(data, 'rb').read()
@@ -110,21 +110,21 @@ class rsaResearch(object):
                         break
                 if zeroEnd:
                     block = data[pos+zeros_length:pos+zeros_length+block_size]
-                    if entropy(block) > 6:
+                    if self.entropy(block) > 6:
                         result.append(block)
         return block
 
-    def find_and_decrypt_random_blocks(data, keys, block_size=0x80, is_verbose=True):
+    def findAndDecryptRandomBlocks(self, data, keys, block_size=0x80, is_verbose=True):
         if len(data) < 0x100:
             data = file(data, 'rb').read()
-        blocks = list(find_block_of_random(data, block_size=block_size))
-        print_if_verbose("Found %d blocks of random" % len(blocks), is_verbose)
+        blocks = list(self.findBlockOfRandom(data, block_size=block_size))
+        printIfVerbose("Found %d blocks of random" % len(blocks), is_verbose)
         plains = []
         for block in blocks:
             plain = decrypt_rsa_try_all_keys(block, keys)
             if None != plain:
-                print_if_verbose("Block at 0x%x decrypted" % (data.find(block)), is_verbose)
-                print_if_verbose(DATA(plain), is_verbose)
+                printIfVerbose("Block at 0x%x decrypted" % (data.find(block)), is_verbose)
+                printIfVerbose(DATA(plain), is_verbose)
                 plains.append(plain)
         return plains
 
