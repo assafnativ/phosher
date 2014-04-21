@@ -7,180 +7,115 @@
 # SHA1 is done from offset 0x400 to the end
 #
 
-from ..general.utile import DATA
-from ..general.fat16 import *
+from ..basicContainerParser import BasicContainerParser
+from ..general.util import *
 from ..general.objectWithStream import *
-from ..crypt.rsa import *
-import os
+
 from struct import pack, unpack
-from cStringIO import StringIO
 
-class ASHA(ObjectWithStream):
-    HEADER_MAGIC = '\x91\x64\x1d\xed'
-    UNKNOWN_HEADER_PART1 = '0000002E00000002C00000000000000036000000000000002F00000000C00000000000000065'.decode('hex')
-    UNKNOWN_HEADER_PART2 = '00000000010100000000000100000000000000'.decode('hex')
-    UNKNOWN_HEADER_PART3 = '319750400000000000000000000000000000000000000000'.decode('hex')
+class ASHA(BasicContainerParser):
+    def __init__(self, fileStream, isBigEndian, isVerbose=False):
+        BasicContainerParser.__init__(self, fileStream, isBigEndian, isVerbose=isVerbose)
 
-    def __init__(self, data):
-        if len(data) < 0x100:
-            data = file(data, 'rb').read()
-        self.data = data
-        self.stream = StringIO(data)
-        self.blobs = self.unpack()
-        self.rsa = RSA()
-
-    def unpack(self):
-        magic = self.read(4)
-        if magic != self.HEADER_MAGIC:
-            raise Exception('Magic marker not found!')
-
-        self.unknownHeaderPart1 = self.read(0x26)
-        mainTag = self.read(4)
-        if mainTag != '\x00' * 4:
-            raise Exception('Parsing error, probebly not ASHA')
-        totalLength = self.readDword()
-        self.unknownHeaderPart2 = self.read(0x13)
-        self.read(1)
-        self.version = self.readWord()
-        self.readWord()
-        if self.version != self.readWord():
-            raise Exception("Two different versions in header")
-        self.read(1)
-        self.unknownHeaderPart3 = self.read(0x18)
-        result = []
-        while pos < len(data):
-            t = self.readDword()
-            l = self.readDword()
-            blob = self.read(l-8)
-            result.append((t,blob))
+    def parseTokens(self, data):
+        tokensData = self.ObjectWithStreamBigEndian(data)
+        result = {}
+        result['check'] = tokensData.readUInt16()
+        unknowns = []
+        unknowns.append(tokensData.read(0x2a))
+        result['dataLength'] = tokensData.readUInt32()
+        unknowns.append(tokensData.read(0x12))
+        result['version'] = tokensData.readUInt32()
+        if result['version'] != tokensData.readUInt32():
+            raise Exception("Versions do not much")
+        result['name'] = tokensData.readString()
+        result['padding'] = tokensData.read()
+        result['unknowns'] = unknowns
         return result
 
-    def dumpBlobsToFiles(self, targetPath):
-        output_dir = target
-        if output_dir[-1] not in ['/', '\\']:
-            output_dir += os.sep
-        blobs = parseXGoldPack(data)
-        if not os.path.isdir(output_dir):
-            os.mkdir(output_dir)
-        for i, (t, d) in enumerate(self.blobs):
-            file(output_dir + '%04x_%x.bin' % (i, t), 'wb').write(d)
-        return output_dir
+    def readTokens(self):
+        tokensLength = self.fileStream.readUint8()
+        tokensData = self.fileStream.read(tokensLength - 1)
+        return self.parseTokens(tokensData)
 
-    def findOneOf(self, data, oldPos, dataToSearch):
-        pos = len(data)
-        for x in dataToSearch:
-            newPos = data.find(x, oldPos)
-            if x != -1 and newPos < pos:
-                pos = newPos
-        if len(data) == pos:
-            return -1
-        return pos
+    def encodeTokens(self):
+        result = self.ObjectWithStreamBigEndian()
+        result.writeUInt16(self.tokens['check']) # I don't know how to fix that
+        result.write(self.tokens['unknowns'][0])
+        result.writeUInt32(self.blobsDataLength)
+        result.write(self.tokens['unknowns'][1])
+        result.writeUInt32(self.tokens['version'])
+        result.writeUInt32(self.tokens['version'])
+        result.writeString(self.tokens['name'])
+        result.write(self.tokens['padding'])
+        return result
 
-    def getPublicKeys(self):
-        headers = [
-                '\x00\x04\x00\x00\x03\x00\x00\x00', \
-                '\x00\x04\x00\x00\x01\x00\x01\x00' ]
-        keys = []
-        for t, blob in self.blobs:
-            pos = self.findOneOf(blob, 0, headers)
-            while -1 != pos:
-                key = blob[pos+0x8:pos+0x88]
-                key = key[::-1]
-                key = int(key.encode('hex'), 16)
-                isKey = True
-                for prime in [2, 3, 5, 7, 11, 13, 17]:
-                    if 0 == (key % prime):
-                        # Too easy to break, very unlikly
-                        isKey = False
-                        break
-                if isKey:
-                    keys.append(key)
-                pos = self.findOneOf(blob, pos + 1, headers)
-        return keys
+    def writeTokens(self, outputStream):
+        tokensStream = self.encodeTokens()
+        outputStream.writeUInt8(len(tokensStream))
+        outputStream.write(tokensStream.getRawData())
 
-    def decryptSigSBL(self, sig_offset=0x100):
-        for t, blob in self.blobs:
-            if 'Quantum_Bootloader' in blob:
-                sbl = blob
-                break
-        else:
-            raise Exception("Failed to find SBL in blobs")
+    def readBlobs(self):
+        length = len(self.fileStream)
+        blobs = []
+        while self.fileStream.tell() < length:
+            blobType = self.fileStream.readUint32()
+            blobLength = self.fileStream.readUInt32()
+            if 0x0c == blobType:
+                zeros = self.fileStream.read(0x10)
+                if '\x00' * 0x10 != zeros:
+                    raise Exception("Blob type 0xc decoding error")
+                supposedEvenXor = self.fileStream.readUint8()
+                supposedOddXor  = self.fileStream.readUint8()
+                twoZeros = self.fileStream.read(2)
+                if '\x00\x00' != twoZeros:
+                    raise Exception("Blob type 0xc decoding error")
+                dataLength = self.fileStream.readUInt32()
+                zero = self.fileStream.readUInt32()
+                if 0 != zero:
+                    raise Exception("Blob type 0xc decoding error")
+                somethingImportant = self.fileStream.readUInt32()
+                blobData = self.fileStream.read(dataLength)
+                evenXor = 0
+                oddXor = 0
+                for i in xrange(0, len(blobData), 2):
+                    evenXor ^= blobData[i]
+                    oddXor  ^= blobData[i+1]
+                if evenXor != supposedEvenXor or oddXor != supposedOddXor:
+                    raise Exception("Worng XOR check in data blob")
+                blobs.append((blobType, (blobData, somethingImportant)))
+            else:
+                blobData = self.fileStream.read(blobLength - 8)
+                blobs.append((blobType, blobData, blobFlags))
 
-        keys = self.getPublicKeys()
-        print 'SBL of size %x loaded' % len(sbl)
-        startPos = sbl.find('Quantum_Bootloader')
-        endPos   = sbl.find('\x00', startPos)
-        print sbl[startPos:endPos]
-        sig = sbl[sig_offset:sig_offset+0x80]
-        plain = self.rsa.decryptRsaBlock(sig, key)
-        if None == plain:
-            raise Exception("Failed to decrypt block")
-        print 'Load address: %x' % unpack('<L', plain[-0x1c:-0x18])[0]
-        print 'Length: %x' % unpack('<L', plain[-0x18:-0x14])[0]
-        print 'Un-signed bytes length: %x' % (len(sbl) - unpack('<L', plain[-0x18:-0x14])[0])
-        return plain
+    def writeBlobs(self, outputStream):
+        for blobType, blobData in self.blobs:
+            outputStream.writeUInt32(blobType)
+            if 0x0c == blobType:
+                blobData, somethingImportant = blobData
+                outputStream.write('\x00' * 0x10)
+                evenXor = 0
+                oddXor  = 0
+                for i in xrange(0, len(blobData), 2):
+                    evenXor ^= blobData[i]
+                    oddXor  ^= blobData[i+1]
+                outputStream.writeUInt8(evenXor)
+                outputStream.writeUInt8(oddXor)
+                outputStream.writeUInt16(0)
+                outputStream.writeUInt32(len(blobData))
+                outputStream.writeUInt32(0)
+                outputStream.writeUInt32(somethingImportant)
+                outputStream.write(blobData)
+            else:
+                outputStream.write(blobData)
 
-    def pack(self, version):
+    def extractData(self):
+        # Just return the largest blob of type 0xc.
+        # I have not better solution for that at this point
         result = ''
-        totalLength = 0
-        for blobType, blobData in blobs:
-            totalLength += 8
-            totalLength += len(blobData)
-        result += self.HEADER_MAGIC
-        result += self.UNKNOWN_HEADER_PART1
-        result += '\x00' * 4 # Main tag type
-        result += pack('>L', totalLength)
-        result += self.UNKNOWN_HEADER_PART2
-        result += '\x00'
-        result += pack('>H', version)
-        result += '\x00'
-        result += '\x00'
-        result += pack('>H', version)
-        result += '\x00'
-        result += self.UNKNOWN_HEADER_PART3
-        for blobType, blobData in blobs:
-            result += pack('<L', blobType)
-            result += pack('<L', len(blobData)+8)
-            result += blobData
-        return result
+        for blobType, blobData in self.blobs:
+            if 0xc == blobType and len(blobData[0]) > len(result):
+                result = blobData[0]
+        return blobData
 
-    def getFirstBlobOfTypeC(self):
-        typeC = None
-        for t, blob in self.blobs:
-            if 0xc == t:
-                typeC = blob
-                break
-        return typeC
-
-    def updateFirstBlobOfTypeC(self, newBlob):
-        typeC = None
-        for i, (t, blob) in enumerate(self.blobs):
-            if 0xc == t:
-                typeC = blob
-                break
-        if None == typeC:
-            raise Exception("Can't find type C blob to update")
-        self.blobs[i] = (t, newBlob)
-
-    def fat16FromImage(self, isNewImageFormat=True):
-        typeC = self.getFirstBlobOfTypeC()
-        if None == typeC:
-            raise Exception("Can't find type C blob in Image")
-        ebfePos = typeC.find('\xeb\xfe')
-        if -1 == ebfePos or ebfePos > 0x100:
-            raise Exception("Can't find FAT16 start")
-        fat16Data = typeC[ebfePos:]
-        self.fat16BlobHeader = typeC[:ebfePos]
-        self.fat16 = FAT16(fat16Data, isNewImageFormat=isNewImageFormat, isVerbose=False)
-        return self.fat16
-
-    def updateFat16(self, fat16):
-        typeC = self.fat16BlobHeader + fat16.make()
-        updateFirstBlobOfTypeC(typeC)
-
-    def dumpFat16ImageToDisk(self, outputPath, isNewImageFormat=True):
-        fat16 = self.fat16FromImage(isNewImageFormat=isNewImageFormat)
-        if not os.path.isdir(outputPath):
-            os.mkdir(outputPath)
-        fat16.dumpTree(outputPath)
     

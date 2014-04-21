@@ -5,5 +5,5 @@ __all__ = [
         'parsePPnPPU',
         'patcher',
         'ppmParser',
-        'utile',
+        'util',
         'wbxml' ]
