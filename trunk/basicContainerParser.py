@@ -23,14 +23,14 @@ class BasicContainerParser(ContainerParser):
             tokenLen = data.readUInt8()
             tokens.append((tokenType, data.read(tokenLen)))
         if len(tokens) != numOfTokens:
-            raise Exception("Tokens parssing error")
+            raise Exception("Tokens parssing error (%x -> %x)" % (numOfTokens, len(tokens)))
         return tokens
 
     def readTokens(self):
         tokensLength = self.fileStream.readUInt32()
         tokensData = self.ObjectWithStream(self.fileStream.read(tokensLength))
-        printIfVerbose("Loading Tokens blob length %x" % blobLength, self.isVerbose)
-        return self.parseTokens(blobData)
+        printIfVerbose("Loading Tokens blob length %x" % tokensLength, self.isVerbose)
+        return self.parseTokens(tokensData)
 
     def writeTokens(self, outputStream):
         # Write the tokens
@@ -38,25 +38,13 @@ class BasicContainerParser(ContainerParser):
         outputStream.writeUInt32(len(tokensStream))
         outputStream.write(tokensStream.getRawData())
 
-    def parseDataBlob( self, data, dataCheck ):
-        # Just checks the bytesSum
-        length = len(data)
-        chunks = []
-        bytesSum = self.generateBytesSum8Bit(data.getRawData())
-        dataCheck -= bytesSum
-        if dataCheck < 0:
-            dataCheck += 0x100
-        if 1 != dataCheck:
-            raise Exception("Data check error!")
-        data.seek(0)
-        return data
-
     def readBlobs(self):
         length = len(self.fileStream)
         blobs = []
         while self.fileStream.tell() < length:
             pos = self.fileStream.tell()
-            blobType = self.fileStream.readUint8()
+            blobType = self.fileStream.readUInt8()
+            blobData = self.parseBlob(blobType)
             if 0x54 == blobType:
                 if 0xb2 != self.fileType:
                     raise Exception("Invalid blob type %x in non BB5 file" % blobType)
@@ -71,7 +59,7 @@ class BasicContainerParser(ContainerParser):
                     extraBytes = ''
                 blobLength = self.fileStream.readUInt32()
                 address = self.fileStream.readUInt32()
-                headerSum = self.fileStream.readUint8()
+                headerSum = self.fileStream.readUInt8()
                 blobData = self.ObjectWithStream(self.fileStream.read(blobLength))
                 blobData.seek(0)
                 data = self.parseDataBlob(blobData, dataCheck)

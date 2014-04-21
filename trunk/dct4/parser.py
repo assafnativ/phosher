@@ -39,10 +39,11 @@ class DCT4(BasicContainerParser):
         (0x0800000, 0x0000), (0x1000000, 0xefdf) ]
     ENCRYPTED_RANGE = (0x1000084, 0x2000000)
 
-    def __init__(self, isBigEndian, isVerbose=False):
-        BasicParser.__init__(self, isBigEndian, isVerbose=isVerbose)
+    def __init__(self, fileStream, isBigEndian, isVerbose=False):
         self.WORDS_PERM_TABLE   = scipy.array(WORDS_PERM_TABLE, scipy.uint16)
         self.INVERS_PERM_TABLE  = scipy.array(INVERS_PERM_TABLE, scipy.uint16)
+        self.fileType = 0xa2
+        BasicContainerParser.__init__(self, fileStream, isBigEndian, isVerbose=isVerbose)
 
     def cryptoInternal(self, data, base):
         addresses = scipy.array(range(base, base + (len(data) * 2), 2), scipy.uint32)
@@ -82,6 +83,37 @@ class DCT4(BasicContainerParser):
         data = self.encryptChunk(data, base=base)
         data.byteswap(True)
         return data
+
+    def parseDataBlob( self, data, dataCheck ):
+        # Just checks the bytesSum
+        length = len(data)
+        chunks = []
+        bytesSum = self.generateBytesSum8Bit(data.getRawData())
+        if dataCheck != bytesSum:
+            raise Exception("Data check error! (%x)" % dataCheck)
+        data.seek(0)
+        return data
+
+    def parseBlob( self, blobType, dataStream ):
+        if 0x14 == blobType:
+            dataStream.pushOffset()
+            address = self.fileStream.readUInt32()
+            dataCheck = self.fileStream.readUInt8()
+            blobLength = unpack('>L', '\x00' + self.fileStream.read(3))[0]
+            dataStream.popOffset()
+            header = self.fileStream.read(8)
+            headerSum = sum([ord(x) for x in header]) & 0xff
+            headerSum ^= 0xff
+            headerCheck = self.fileStream.readUInt8()
+            if headerSum != headerCheck:
+                raise Exception("Header checksum mismatch")
+            printIfVerbose("Loading DATA blob (%x) of length %x starting at %x" % (blobType, blobLength, pos), self.isVerbose)
+            blobData = self.ObjectWithStream(self.fileStream.read(blobLength))
+            blobData.seek(0)
+            data = self.parseDataBlob(blobData, dataCheck)
+            return (address, address + blobLength, data)
+        else:
+            raise Exception("Don't know how to parse blob of type %x in file type %x" % (blobType, self.fileType))
 
     def extractPlain( self ):
         if self.address < self.ENCRYPTED_RANGE[1] and self.endAddress > self.ENCRYPTED_RANGE[0]:
