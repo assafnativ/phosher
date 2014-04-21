@@ -1,7 +1,7 @@
 
 import os
 from glob import glob
-from ..general.utile import *
+from ..general.util import *
 
 class RSA(object):
     def __init__(self):
@@ -47,7 +47,7 @@ class RSA(object):
                         break
                 if isKey:
                     # Just one more check
-                    hexKey = '%x' key
+                    hexKey = '%x' % key
                     if hexKey.count('0') < (len(hexKey) / 4):
                         keys.append(key)
                 pos = self.findOneOf(data, pos + 1, headers)
