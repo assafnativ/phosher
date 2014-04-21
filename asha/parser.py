@@ -15,6 +15,7 @@ from struct import pack, unpack
 
 class ASHA(BasicContainerParser):
     def __init__(self, fileStream, isBigEndian, isVerbose=False):
+        self.fileType = 0x91
         BasicContainerParser.__init__(self, fileStream, isBigEndian, isVerbose=isVerbose)
 
     def parseTokens(self, data):
