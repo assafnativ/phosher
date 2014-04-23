@@ -41,15 +41,15 @@ class NokiaFile(ParserInterface):
         
         # Make an access to the file data
         self.fileStream = self.ObjectWithStream(self.rawData)
-        self.fileStream.seek(1)
+        self.fileStream.seek(1, 0)
 
         # Set the right parser for this file type
         if 0xA2 == self.fileType:
             self.containerParser = DCT4(self.fileStream, self.isBigEndian, isVerbose=self.isVerbose)
         elif 0xB2 == self.fileType:
-            self.containerParser = BB5(self.fileStream, self.isBigEndian)
+            self.containerParser = BB5(self.fileStream, self.isBigEndian, isVerbose=self.isVerbose)
         elif 0x91 == self.fileType:
-            self.containerParser = ASHA(self.fileStream, self.isBigEndian)
+            self.containerParser = ASHA(self.fileStream, self.isBigEndian, isVerbose=self.isVerbose)
         else:
             raise Exception('File type %x not supported' % self.fileType)
 
@@ -59,11 +59,11 @@ class NokiaFile(ParserInterface):
         # Parse blobs
         self.blobs = self.containerParser.readBlobs()
 
-        self.address, self.extractedData = self.extractData()
+        self.address, self.extractedData = self.containerParser.extractData(self.blobs)
         self.endAddress = self.address + len(self.extractedData)
 
         # Parse things that are special for this file type
-        self.plain = self.containerParser.extractPlain()
+        self.plain = self.containerParser.extractPlain(self.blobs)
 
     def encode( self ):
         blobsData = self.ObjectWithStream()
@@ -73,21 +73,9 @@ class NokiaFile(ParserInterface):
         self.containerParser.writeTokens(tokensData)
         return tokensData.getRawData() + blobsData.getRawData()
 
-    def extractData( self ):
-        base = None
-        result = self.ObjectWithStream()
-        for blobType, blob in self.blobs:
-            if blobType in [0x54, 0x14]:
-                address, endAddress, data = (blob[0], blob[1], blob[2])
-                if None == base:
-                    base = address
-                offset = address - base
-                if result.tell() > offset:
-                    raise Exception("Overlapped blobs!")
-                elif result.tell() < offset:
-                    result.write('\xff' * (offset - result.tell()))
-                result.write(data.getRawData())
-        return (base, result)
 
-    def extractPlain( self ):
-        return self.ObjectWithStream(self.extractData.getRawData())
+    def extractData(self):
+        return self.containerParser.extractData(self.blobs)
+
+    def extractPlain(self):
+        return self.containerParser.extractPlain(self.blobs)

@@ -115,31 +115,34 @@ class DCT4(BasicContainerParser):
         else:
             raise Exception("Don't know how to parse blob of type %x in file type %x" % (blobType, self.fileType))
 
-    def extractPlain( self ):
-        if self.address < self.ENCRYPTED_RANGE[1] and self.endAddress > self.ENCRYPTED_RANGE[0]:
+    def extractPlain( self, blobs ):
+        address, extractedData = self.extractData(blobs)
+        endAddress = address + len(extractedData)
+        if address < self.ENCRYPTED_RANGE[1] and endAddress > self.ENCRYPTED_RANGE[0]:
             # There is some encrypted data
-            encryptedDataStart  = max(self.address,     self.ENCRYPTED_RANGE[0])
-            encryptedDataEnd    = min(self.endAddress,  self.ENCRYPTED_RANGE[1])
-            encryptedDataOffset     = encryptedDataStart    - self.address
-            encryptedDataEndOffset  = encryptedDataEnd      - self.address
+            encryptedDataStart  = max(address,     self.ENCRYPTED_RANGE[0])
+            encryptedDataEnd    = min(endAddress,  self.ENCRYPTED_RANGE[1])
+            encryptedDataOffset     = encryptedDataStart    - address
+            encryptedDataEndOffset  = encryptedDataEnd      - address
             encryptedDataLength     = encryptedDataEnd - encryptedDataStart
-            self.plain = self.ObjectWithStream()
+            plain = self.ObjectWithStream()
             printIfVerbose("Data chunk from %x to %x Decrypting data from %x to %x" % (
-                self.address, 
-                self.endAddress,
+                address,
+                endAddress,
                 encryptedDataStart,
                 encryptedDataEnd), self.isVerbose)
-            self.extractedData.seek(0)
+            extractedData.seek(0)
             if encryptedDataOffset > 0:
-                self.plain.write( self.extractedData.read(encryptedDataOffset) )
-            decryptedData = self.decrypt(self.extractedData.read(encryptedDataLength), encryptedDataStart)
+                plain.write( extractedData.read(encryptedDataOffset) )
+            decryptedData = self.decrypt(extractedData.read(encryptedDataLength), encryptedDataStart)
             if len(decryptedData) != encryptedDataLength:
                 raise Exception("Decrypt returned wrong number of bytes")
-            self.plain.write( decryptedData )
-            if encryptedDataEnd < self.endAddress:
-                self.plain.write( self.extractedData.read() )
+            plain.write( decryptedData )
+            if encryptedDataEnd < endAddress:
+                plain.write( extractedData.read() )
         else:
-            self.plain = self.extractedData
+            plain = extractedData
+        return (address, plain)
 
     def produceCipher(self, address, plain):
         endAddress = address + len(plain)
