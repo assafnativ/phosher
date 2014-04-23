@@ -59,3 +59,13 @@ class ContainerParser( object ):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 
+    @abstractmethod
+    def extractData(self):
+        """ Pure virtual """
+        raise NotImplementedError("Pure function call")
+
+    @abstractmethod
+    def extractPlain(self):
+        """ Pure virtual """
+        raise NotImplementedError("Pure function call")
+

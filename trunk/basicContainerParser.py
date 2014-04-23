@@ -7,6 +7,7 @@ from .general.util import *
 class BasicContainerParser(ContainerParser):
     def __init__(self, fileStream, isBigEndian, isVerbose=False):
         self.isVerbose = isVerbose
+        self.isBigEndian = isBigEndian
         if isBigEndian:
             self.ObjectWithStream = ObjectWithStreamBigEndian
         else:
@@ -44,48 +45,8 @@ class BasicContainerParser(ContainerParser):
         while self.fileStream.tell() < length:
             pos = self.fileStream.tell()
             blobType = self.fileStream.readUInt8()
-            blobData = self.parseBlob(blobType)
-            if 0x54 == blobType:
-                if 0xb2 != self.fileType:
-                    raise Exception("Invalid blob type %x in non BB5 file" % blobType)
-                subType = self.fileStream.readUInt16()
-                headerLength = self.fileStream.readUInt8()
-                flashId = [ord(x) for x in self.fileStream.read(3)]
-                dataCheck = self.fileStream.readUInt16()
-                someFlag = self.fileStream.readUInt8()
-                if 0xe < headerLength:
-                    extraBytes = self.fileStream.read(headerLength - 0xe)
-                else:
-                    extraBytes = ''
-                blobLength = self.fileStream.readUInt32()
-                address = self.fileStream.readUInt32()
-                headerSum = self.fileStream.readUInt8()
-                blobData = self.ObjectWithStream(self.fileStream.read(blobLength))
-                blobData.seek(0)
-                data = self.parseDataBlob(blobData, dataCheck)
-                blobs.append((blobType, (address, address + blobLength, data, subType, flashId, someFlag, extraBytes)))
-            elif 0x14 == blobType:
-                if 0x14 != self.fileType:
-                    raise Exception("Invalid blob type %x in non BB5 file" % blobType)
-                self.pushOffset()
-                address = self.fileStream.readUInt32()
-                dataCheck = self.fileStream.readUInt8()
-                blobLength = unpack('>L', '\x00' + self.fileStream.read(3))[0]
-                self.popOffset()
-                header = self.fileStream.read(8)
-                headerSum = sum([ord(x) for x in header]) & 0xff
-                headerSum ^= 0xff
-                headerCheck = self.fileStream.readUInt8()
-                if headerSum != headerCheck:
-                    raise Exception("Header checksum mismatch")
-                printIfVerbose("Loading DATA blob (%x) of length %x starting at %x" % (blobType, blobLength, pos), self.isVerbose)
-                blobData = self.ObjectWithStream(self.fileStream.read(blobLength))
-                blobData.seek(0)
-                data = self.parseDataBlob(blobData, dataCheck)
-                blobs.append((blobType, (address, address + blobLength, data)))
-                isBlobEncrypted = True
-            else:
-                raise Exception("Unknown blob type %x" % blobType)
+            blobData = self.parseBlob(blobType, self.fileStream)
+            blobs.append((blobType, blobData))
         return blobs
 
     def writeBlobs( self, outputStream ):
@@ -122,7 +83,7 @@ class BasicContainerParser(ContainerParser):
         ints = unpack(unpackType + ('H' * (len(data) / 2)), data)
         result = 0
         for i in ints:
-            reuslt ^= i
+            result ^= i
         return result
 
     def generateBytesSum8Bit(self, data):
@@ -183,3 +144,21 @@ class BasicContainerParser(ContainerParser):
         result.seek(0)
         return result
 
+    def extractData( self, blobs ):
+        base = None
+        result = self.ObjectWithStream()
+        for blobType, blob in blobs:
+            if blobType in [0x54, 0x14]:
+                address, endAddress, data = (blob[0], blob[1], blob[2])
+                if None == base:
+                    base = address
+                offset = address - base
+                if result.tell() > offset:
+                    raise Exception("Overlapped blobs!")
+                elif result.tell() < offset:
+                    result.write('\xff' * (offset - result.tell()))
+                result.write(data.getRawData())
+        return (base, result)
+
+    def extractPlain( self, blobs ):
+        return self.extractData(blobs)
