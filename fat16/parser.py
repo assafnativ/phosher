@@ -297,7 +297,7 @@ def splitXGoldStream(data):
     stream2.seek(0,0)
     return (stream1, stream2)
 
-def makeXGoldStream(data):
+def makePaddedImage(data):
     output = StringIO()
     stream = StringIO(data)
     d = stream.read(0xf800)
@@ -324,8 +324,8 @@ def makeXGoldStream(data):
     return output
 
 class FAT16(ObjectWithStream):
-    def __init__(self, data, isXGold=False, isVerbose=True):
-        self.isXGold = isXGold
+    def __init__(self, data, hasPadding=False, isVerbose=True):
+        self.hasPadding = hasPadding
         self.isVerbose = isVerbose
         if len(data) < 0x100:
             self.stream  = file(data, 'rb')
@@ -334,7 +334,7 @@ class FAT16(ObjectWithStream):
             self.stream.write(data)
         stream = self.stream
         stream.seek(0, 0)
-        if isXGold:
+        if hasPadding:
             data = stream.read()
             self.stream1, self.stream2 = splitXGoldStream(data)
             stream = self.stream1
@@ -787,22 +787,22 @@ class FAT16(ObjectWithStream):
         output.write(self.stream.read())
 
         output.seek(0, 0)
-        if self.isXGold:
-            output = makeXGoldStream(output.read())
+        if self.hasPadding:
+            output = makePaddedImage(output.read())
         return output.read()
 
-    def xGoldReadPadding(self, paddingLength):
+    def readPadding(self, paddingLength):
         if 0 != paddingLength:
             paddingZero = self.stream.read(paddingLength)
             if paddingZero.count('\x00') != paddingLength:
-                raise Exception("xGold padding error")
+                raise Exception("Padded image error")
 
-    def xGoldReadModPadding(self, paddingMod=0x200):
+    def readModPadding(self, paddingMod=0x200):
         paddingLength = abs(self.stream.tell() % (-paddingMod))
         if 0 != paddingLength:
             paddingZero = self.stream.read(paddingLength)
             if paddingZero.count('\x00') != paddingLength:
-                raise Exception("xGold padding error")
+                raise Exception("Padded image error")
 
     def getClustersChain(self, firstCluster):
         if 'EndMarker' == clusterType(firstCluster):

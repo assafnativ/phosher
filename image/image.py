@@ -3,9 +3,8 @@ import os
 import shutil
 from optparse import OptionParser
 
-from ..asha.parser import ASHA
-from ..dct4.parser import DCT4
-from ..general.utile import *
+from ..nokiaFile import NokiaFile
+from ..fat16.parser import FAT16
 
 def patchImage(img, fat16, outputFile, PATCHES, isNewFormat):
     fat16Patcher = Fat16Patcher(fat16)
@@ -22,7 +21,7 @@ def main():
     userOptions.add_option("-d", "--dump",      dest="isDump",      action="store_true", help="Dump files in image to disk")
     userOptions.add_option("-u", "--dumpDest",  dest="dumpDest",    type="string", help="Where to dump files from image")
     userOptions.add_option("-c", "--createIma", dest="createIma",   action="store_true", help="Create FAT16 image file")
-    userOptions.add_option("-w", "--imageName", dest="imageName",   type="string", help="Destnation FAT16 image file")
+    userOptions.add_option("-w", "--imageName", dest="imageName",   type="string", help="Destination FAT16 image file")
     userOptions.add_option("-v", "--verbose",   dest="isVerbose",   action="store_true", help="Set verbose output on")
     userOptions.add_option("-h", "--help", action="help")
     userOptions.set_defaults(inputFile=None, outputFile=None, isNewFormat=False, isVerbose=False)
@@ -68,8 +67,16 @@ def main():
         imageName = inputFile + '.ima'
     elif "IMAGE_FILE"   in globals() and None == imageName:
         imageName = IMAGE_FILE
-    img = ASHA(inputFile)
-    fat16 = img.fat16FromImage(isNewImageFormat=isNewFormat)
+    nokiaFile = NokiaFile(inputFile)
+    imageData = nokiaFile.extractPlain()
+    if (imageData[:2] != '\xeb\xfe'):
+        raise Exception("Data doesn't seem like FAT16 image")
+    try:
+        fat16 = FAT16(imageData)
+    except Exception, e:
+        print("Parsing error, attempting to parse as padded image")
+        fat16 = FAT16(imageData, hasPadding=True)
+
     if None != patchesFile:
         outputFile = patchImage(img, fat16, outputFile, PATCHES, isNewFormat=isNewFormat)
     if isDump:
