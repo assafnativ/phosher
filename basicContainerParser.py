@@ -12,55 +12,31 @@ class BasicContainerParser(ContainerParser):
             self.ObjectWithStream = ObjectWithStreamBigEndian
         else:
             self.ObjectWithStream = ObjectWithStream
-        self.fileStream = fileStream
-    
-    def parseTokens(self, data):
-        numOfTokens = data.readUInt32()
-        printIfVerbose( "Decoding %d tokens (Total size 0x%x)" % (numOfTokens, len(data)), self.isVerbose )
-        tokens = []
-        length = len(data)
-        while data.tell() < length:
-            tokenType = data.readUInt8()
-            tokenLen = data.readUInt8()
-            tokens.append((tokenType, data.read(tokenLen)))
-        if len(tokens) != numOfTokens:
-            raise Exception("Tokens parssing error (%x -> %x)" % (numOfTokens, len(tokens)))
-        return tokens
 
-    def readTokens(self):
-        tokensLength = self.fileStream.readUInt32()
-        tokensData = self.ObjectWithStream(self.fileStream.read(tokensLength))
-        printIfVerbose("Loading Tokens blob length %x" % tokensLength, self.isVerbose)
-        return self.parseTokens(tokensData)
-
-    def writeTokens(self, outputStream):
-        # Write the tokens
-        tokensStream = self.encodeTokens()
-        outputStream.writeUInt32(len(tokensStream))
-        outputStream.write(tokensStream.getRawData())
-
-    def readBlobs(self):
-        length = len(self.fileStream)
+    def readBlobs(self, stream):
+        length = len(stream)
         blobs = []
-        while self.fileStream.tell() < length:
-            pos = self.fileStream.tell()
-            blobType = self.fileStream.readUInt8()
-            blobData = self.parseBlob(blobType, self.fileStream)
+        while stream.tell() < length:
+            pos = stream.tell()
+            blobType = stream.readUInt8()
+            blobData = self.parseBlob(blobType, stream)
             blobs.append((blobType, blobData))
         return blobs
 
-    def writeBlobs( self, outputStream ):
-        for blobType, blobData in self.blobs:
+    def writeBlobs( self, outputStream, blobs, address, plain ):
+        for blobType, blobData in blobs:
             outputStream.writeUInt8(blobType)
             if blobType in [0x14, 0x54]:
-                address     = blobData[0]
+                blobAddr     = blobData[0]
                 endAddress  = blobData[1]
-                plain = self.plain.readFromTo(address - self.address, endAddress - self.address)
-                cipher = self.containerParser.produceCipher(address, plain)
+                plainChunk = plain.readFromTo(blobAddr - address, endAddress - address)
+                cipher = self.encrypt(blobAddr, plainChunk)
                 if 0x14 == blobType:
-                    outputStream.write(self.createDataBlobType14(cipher, address).getRawData())
+                    outputStream.write(self.createDataBlobType14(
+                        cipher, blobAddr).getRawData())
                 elif 0x54 == blobType:
-                    outputStream.write(self.createDataBlobType54(cipher, address, blobData[3], blobData[4], blobData[5], blobData[6]).getRawData())
+                    outputStream.write(self.createDataBlobType54(
+                        cipher, blobAddr, blobData[3], blobData[4], blobData[5], blobData[6]).getRawData())
                 else:
                     raise Exception("Don't know how to produce data blob to type %x" % blobType)
             else:
@@ -106,13 +82,13 @@ class BasicContainerParser(ContainerParser):
         result.seek(0)
         return result
 
-    def createDataBlobType54(self, data, addr, subType, flashId, someFlag, extraBytes):
+    def createDataBlobType54(self, data, address, subType, flashId, someFlag, extraBytes):
         data = self.validateCreateDataBlobInput(data)
         result = self.ObjectWithStream()
         result.writeUInt16(subType)
         result.writeUInt8(0xe + len(extraBytes))
         for fId in flashId:
-            reuslt.writeUInt8(fId)
+            result.writeUInt8(fId)
         dataCheck = self.generateDataCheck16Bit(data)
         result.writeUInt16(dataCheck)
         result.writeUInt8(someFlag)
@@ -122,25 +98,7 @@ class BasicContainerParser(ContainerParser):
         result.writeUInt32(address)
         headerSum = self.generateBytesSum8Bit(result.getRawData())
         result.writeUInt8(headerSum)
-        result.seek(0)
-        return result
-
-    def encodeTokens(self):
-        tokens = None
-        for blobType, blobData in self.blobs:
-            if blobType in [0xa2, 0xb2]:
-                tokens = blobData
-                break
-        if None == tokens:
-            raise Exception("Instance doesn't have tokens")
-        result = self.ObjectWithStream()
-        result.writeUInt32(len(tokens))
-        printIfVerbose( "Writting %d tokens" % len(tokens), self.isVerbose )
-        for tokenId, tokenData in tokens:
-            printIfVerbose( "Writting token id=0x%x of 0x%x bytes" % (tokenId, len(tokenData)), self.isVerbose )
-            result.writeUInt8(tokenId)
-            result.writeUInt8(len(tokenData))
-            result.write(tokenData)
+        result.write(data)
         result.seek(0)
         return result
 
@@ -162,3 +120,20 @@ class BasicContainerParser(ContainerParser):
 
     def extractPlain( self, blobs ):
         return self.extractData(blobs)
+
+    def encrypt(self, address, plain):
+        # Default - No encryption
+        return plain
+
+    def readTokens(self, stream):
+        tokensLength = stream.readUInt32()
+        tokensData = self.ObjectWithStream(stream.read(tokensLength))
+        printIfVerbose("Loading Tokens blob length %x" % tokensLength, self.isVerbose)
+        return self.decodeTokens(tokensData)
+
+    def writeTokens(self, outputStream, tokens):
+        # Write the tokens
+        tokensStream = self.encodeTokens(tokens)
+        outputStream.writeUInt32(len(tokensStream))
+        outputStream.write(tokensStream.getRawData())
+

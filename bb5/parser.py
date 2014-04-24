@@ -36,10 +36,10 @@ class BB5(BasicContainerParser):
         else:
             raise Exception("Don't know how to parse blob of type %x in file type %x" % (blobType, self.fileType))
 
-    def readTokens(self):
-        tokensLength = self.fileStream.readUInt32()
-        return self.fileStream.read(tokensLength)
+    def decodeTokens(self, data):
+        # Don't know how to decode BB5 tokens
+        return data
 
-    def writeTokens(self, outputStream):
-        outputStream.writeUInt32(len(self.tokens))
-        outputStream.write(self.tokens)
+    def encodeTokens(selfs, tokens):
+        return tokens
+

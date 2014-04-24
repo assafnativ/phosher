@@ -45,7 +45,7 @@ class ContainerParser( object ):
         raise NotImplementedError("Pure function call")
         
     @abstractmethod
-    def writeBlobs(self, outputStream):
+    def writeBlobs( self, outputStream, blobs, address, plain ):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 
@@ -55,17 +55,22 @@ class ContainerParser( object ):
         raise NotImplementedError("Pure function call")
 
     @abstractmethod
-    def writeTokens(self, outputStream):
+    def writeTokens(self, outputStream, tokens):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 
     @abstractmethod
-    def extractData(self):
+    def extractData( self, blobs ):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 
     @abstractmethod
-    def extractPlain(self):
+    def extractPlain( self, blobs ):
+        """ Pure virtual """
+        raise NotImplementedError("Pure function call")
+
+    @abstractmethod
+    def encrypt(self, address, plain):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 
