@@ -54,25 +54,26 @@ class NokiaFile(ParserInterface):
             raise Exception('File type %x not supported' % self.fileType)
 
         # Read the tokens
-        self.tokens = self.containerParser.readTokens()
+        self.tokens = self.containerParser.readTokens(self.fileStream)
 
         # Parse blobs
-        self.blobs = self.containerParser.readBlobs()
+        self.blobs = self.containerParser.readBlobs(self.fileStream)
 
         self.address, self.extractedData = self.containerParser.extractData(self.blobs)
         self.endAddress = self.address + len(self.extractedData)
 
         # Parse things that are special for this file type
-        self.plain = self.containerParser.extractPlain(self.blobs)
+        plainAddress, self.plain = self.extractPlain()
+        if (plainAddress != self.address):
+            raise Exception("This scenario is not supported at the moment")
 
     def encode( self ):
         blobsData = self.ObjectWithStream()
-        self.containerParser.writeBlobs(blobsData)
+        self.containerParser.writeBlobs(blobsData, self.blobs, self.address, self.plain)
         self.blobsDataLength = len(blobsData)
         tokensData = self.ObjectWithStream()
-        self.containerParser.writeTokens(tokensData)
-        return tokensData.getRawData() + blobsData.getRawData()
-
+        self.containerParser.writeTokens(tokensData, self.tokens)
+        return chr(self.fileType) + tokensData.getRawData() + blobsData.getRawData()
 
     def extractData(self):
         return self.containerParser.extractData(self.blobs)

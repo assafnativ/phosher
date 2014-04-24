@@ -89,6 +89,7 @@ class DCT4(BasicContainerParser):
         length = len(data)
         chunks = []
         bytesSum = self.generateBytesSum8Bit(data.getRawData())
+        bytesSum = (bytesSum + 1) & 0xff
         if dataCheck != bytesSum:
             raise Exception("Data check error! (%x)" % dataCheck)
         data.seek(0)
@@ -96,19 +97,20 @@ class DCT4(BasicContainerParser):
 
     def parseBlob( self, blobType, dataStream ):
         if 0x14 == blobType:
+            pos = dataStream.tell()
             dataStream.pushOffset()
-            address = self.fileStream.readUInt32()
-            dataCheck = self.fileStream.readUInt8()
-            blobLength = unpack('>L', '\x00' + self.fileStream.read(3))[0]
+            address = dataStream.readUInt32()
+            dataCheck = dataStream.readUInt8()
+            blobLength = unpack('>L', '\x00' + dataStream.read(3))[0]
             dataStream.popOffset()
-            header = self.fileStream.read(8)
+            header = dataStream.read(8)
             headerSum = sum([ord(x) for x in header]) & 0xff
             headerSum ^= 0xff
-            headerCheck = self.fileStream.readUInt8()
+            headerCheck = dataStream.readUInt8()
             if headerSum != headerCheck:
                 raise Exception("Header checksum mismatch")
             printIfVerbose("Loading DATA blob (%x) of length %x starting at %x" % (blobType, blobLength, pos), self.isVerbose)
-            blobData = self.ObjectWithStream(self.fileStream.read(blobLength))
+            blobData = self.ObjectWithStream(dataStream.read(blobLength))
             blobData.seek(0)
             data = self.parseDataBlob(blobData, dataCheck)
             return (address, address + blobLength, data)
@@ -144,10 +146,8 @@ class DCT4(BasicContainerParser):
             plain = extractedData
         return (address, plain)
 
-    def produceCipher(self, address, plain):
+    def encrypt(self, address, plain):
         endAddress = address + len(plain)
-        if address < self.address or address > self.endAddress:
-            raise Exception("Data out of range")
         if 0 == len(plain):
             raise Exception("No plain data!")
         if address < self.ENCRYPTED_RANGE[1] and endAddress > self.ENCRYPTED_RANGE[0]:
@@ -155,7 +155,7 @@ class DCT4(BasicContainerParser):
             encryptedDataEnd    = min(endAddress,  self.ENCRYPTED_RANGE[1])
             encryptedDataOffset     = encryptedDataStart    - address
             encryptedDataEndOffset  = encryptedDataEnd      - address
-            encryptedDataLength     = encryptedDataEnd - encryptedDataStart
+            #encryptedDataLength     = encryptedDataEnd - encryptedDataStart
             dataToWrite = self.ObjectWithStream()
             if encryptedDataOffset > 0:
                 dataToWrite.write(plain[:encryptedDataOffset])
@@ -165,6 +165,33 @@ class DCT4(BasicContainerParser):
         else:
             dataToWrite = plain
         return dataToWrite
+
+    def decodeTokens(self, data):
+        numOfTokens = data.readUInt32()
+        printIfVerbose( "Decoding %d tokens (Total size 0x%x)" % (numOfTokens, len(data)), self.isVerbose )
+        tokens = []
+        length = len(data)
+        while data.tell() < length:
+            tokenType = data.readUInt8()
+            tokenLen = data.readUInt8()
+            tokens.append((tokenType, data.read(tokenLen)))
+        if len(tokens) != numOfTokens:
+            raise Exception("Tokens parssing error (%x -> %x)" % (numOfTokens, len(tokens)))
+        return tokens
+
+    def encodeTokens(self, tokens):
+        if None == tokens:
+            raise Exception("No tokens")
+        result = self.ObjectWithStream()
+        result.writeUInt32(len(tokens))
+        printIfVerbose( "Writting %d tokens" % len(tokens), self.isVerbose )
+        for tokenId, tokenData in tokens:
+            printIfVerbose( "Writting token id=0x%x of 0x%x bytes" % (tokenId, len(tokenData)), self.isVerbose )
+            result.writeUInt8(tokenId)
+            result.writeUInt8(len(tokenData))
+            result.write(tokenData)
+        result.seek(0)
+        return result
 
 
 # A2 - The format version / type
