@@ -35,12 +35,12 @@ class ContainerParser( object ):
     __metaclass__ = ABCMeta
 
     @abstractmethod
-    def __init__(self):
+    def __init__(self, fileStream, isBigEndian, isVerbose):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 
     @abstractmethod
-    def readBlobs(self):
+    def readBlobs(self, stream):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
         
@@ -55,7 +55,7 @@ class ContainerParser( object ):
         raise NotImplementedError("Pure function call")
 
     @abstractmethod
-    def writeTokens(self, outputStream, tokens):
+    def writeTokens(self, outputStream, tokens, restOfData):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 

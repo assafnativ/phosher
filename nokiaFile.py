@@ -72,7 +72,7 @@ class NokiaFile(ParserInterface):
         self.containerParser.writeBlobs(blobsData, self.blobs, self.address, self.plain)
         self.blobsDataLength = len(blobsData)
         tokensData = self.ObjectWithStream()
-        self.containerParser.writeTokens(tokensData, self.tokens)
+        self.containerParser.writeTokens(tokensData, self.tokens, blobsData)
         return chr(self.fileType) + tokensData.getRawData() + blobsData.getRawData()
 
     def extractData(self):
