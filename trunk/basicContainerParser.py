@@ -131,7 +131,7 @@ class BasicContainerParser(ContainerParser):
         printIfVerbose("Loading Tokens blob length %x" % tokensLength, self.isVerbose)
         return self.decodeTokens(tokensData)
 
-    def writeTokens(self, outputStream, tokens):
+    def writeTokens(self, outputStream, tokens, restOfData):
         # Write the tokens
         tokensStream = self.encodeTokens(tokens)
         outputStream.writeUInt32(len(tokensStream))
