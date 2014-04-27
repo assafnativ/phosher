@@ -144,7 +144,7 @@ class DCT4(BasicContainerParser):
                 plain.write( extractedData.read() )
         else:
             plain = extractedData
-        return (address, plain)
+        return (address, plain.getRawData())
 
     def encrypt(self, address, plain):
         endAddress = address + len(plain)
