@@ -1,10 +1,15 @@
 
-from ..general.ObjectWithStream.py import *
+from ..general.objectWithStream import *
 
 from cStringIO import *
 from struct import pack, unpack
 import time
 import copy
+import os
+
+PADDING_TYPE_NO_PADDING = 0
+PADDING_TYPE_DCT4 = 1
+PADDING_TYPE_NEW  = 2
 
 def attributesToStr(x):
     result = ''
@@ -56,13 +61,13 @@ def clusterType(x):
 class LongFileNameEntry(ObjectWithStream):
     def __init__(self, stream):
         self.stream = stream
-        self.partIndex      = self.readByte()      #  0
-        self.name           = stream.read(0x0a)     #  1
-        self.attribs        = self.readWord()      # 11
-        self.checksum       = self.readByte()      # 13
-        self.name          += stream.read(0x0c)     # 14
-        self.zero           = self.readWord()      # 26
-        self.name          += stream.read(4)        # 28
+        self.partIndex      = self.readUInt8()      #  0
+        self.name           = self.read(0x0a)     #  1
+        self.attribs        = self.readUInt16()      # 11
+        self.checksum       = self.readUInt8()      # 13
+        self.name          += self.read(0x0c)     # 14
+        self.zero           = self.readUInt16()      # 26
+        self.name          += self.read(4)        # 28
         # Total 32
 
 class DirEntry(ObjectWithStream):
@@ -70,19 +75,19 @@ class DirEntry(ObjectWithStream):
         if hasattr(stream, 'read'):
             self.stream = stream
             self.longName = longName
-            self.name           = stream.read(8)        #  0
-            self.ext            = stream.read(3)        #  8
-            self.attributes     = self.readByte()      # 11
-            self.longFileName   = self.readByte()      # 12
-            self.creationMicro  = self.readByte()      # 13
-            self.creationTime   = self.readWord()      # 14
-            self.creationDate   = self.readWord()      # 16
-            self.accessDate     = self.readWord()      # 18
-            self.zero           = stream.read(2)        # 20
-            self.updateTime     = self.readWord()      # 22
-            self.updateDate     = self.readWord()      # 24
-            self.firstCluster   = self.readWord()      # 26
-            self.fileSize       = self.readDword()     # 28
+            self.name           = self.read(8)        #  0
+            self.ext            = self.read(3)        #  8
+            self.attributes     = self.readUInt8()      # 11
+            self.longFileName   = self.readUInt8()      # 12
+            self.creationMicro  = self.readUInt8()      # 13
+            self.creationTime   = self.readUInt16()      # 14
+            self.creationDate   = self.readUInt16()      # 16
+            self.accessDate     = self.readUInt16()      # 18
+            self.zero           = self.read(2)        # 20
+            self.updateTime     = self.readUInt16()      # 22
+            self.updateDate     = self.readUInt16()      # 24
+            self.firstCluster   = self.readUInt16()      # 26
+            self.fileSize       = self.readUInt32()     # 28
             # Total 32
         else:
             info = stream
@@ -202,31 +207,31 @@ class DirEntry(ObjectWithStream):
             ext += ' ' * (3 - len(ext))
         result += ext
         result += chr(self.attributes)
-        result += self.makeByte(self.longFileName)
-        result += self.makeByte(self.creationMicro)
-        result += self.makeWord(self.creationTime)
-        result += self.makeWord(self.creationDate)
-        result += self.makeWord(self.accessDate)
+        result += self.makeUInt8(self.longFileName)
+        result += self.makeUInt8(self.creationMicro)
+        result += self.makeUInt16(self.creationTime)
+        result += self.makeUInt16(self.creationDate)
+        result += self.makeUInt16(self.accessDate)
         result += self.zero
-        result += self.makeWord(self.updateTime)
-        result += self.makeWord(self.updateDate)
-        result += self.makeWord(self.firstCluster)
-        result += self.makeDword(self.fileSize)
+        result += self.makeUInt16(self.updateTime)
+        result += self.makeUInt16(self.updateDate)
+        result += self.makeUInt16(self.firstCluster)
+        result += self.makeUInt32(self.fileSize)
         return result
 
     def makeDotEntry(self):
         result = '.          '
         result += chr(self.attributes)
         result += '\x00'
-        result += self.makeByte(self.creationMicro)
-        result += self.makeWord(self.creationTime)
-        result += self.makeWord(self.creationDate)
-        result += self.makeWord(self.accessDate)
+        result += self.makeUInt8(self.creationMicro)
+        result += self.makeUInt16(self.creationTime)
+        result += self.makeUInt16(self.creationDate)
+        result += self.makeUInt16(self.accessDate)
         result += self.zero
-        result += self.makeWord(self.updateTime)
-        result += self.makeWord(self.updateDate)
-        result += self.makeWord(self.firstCluster)
-        result += self.makeDword(self.fileSize)
+        result += self.makeUInt16(self.updateTime)
+        result += self.makeUInt16(self.updateDate)
+        result += self.makeUInt16(self.firstCluster)
+        result += self.makeUInt32(self.fileSize)
         return result
 
     def makeDotDotEntry(self):
@@ -235,15 +240,15 @@ class DirEntry(ObjectWithStream):
         result = '..         '
         result += chr(self.parent.attributes)
         result += '\x00'
-        result += self.makeByte(self.parent.creationMicro)
-        result += self.makeWord(self.parent.creationTime)
-        result += self.makeWord(self.parent.creationDate)
-        result += self.makeWord(self.parent.accessDate)
+        result += self.makeUInt8(self.parent.creationMicro)
+        result += self.makeUInt16(self.parent.creationTime)
+        result += self.makeUInt16(self.parent.creationDate)
+        result += self.makeUInt16(self.parent.accessDate)
         result += self.zero
-        result += self.makeWord(self.parent.updateTime)
-        result += self.makeWord(self.parent.updateDate)
-        result += self.makeWord(max([0, self.parent.firstCluster]))
-        result += self.makeDword(self.parent.fileSize)
+        result += self.makeUInt16(self.parent.updateTime)
+        result += self.makeUInt16(self.parent.updateDate)
+        result += self.makeUInt16(max([0, self.parent.firstCluster]))
+        result += self.makeUInt32(self.parent.fileSize)
         return result
 
     def calcDosNameChecksum(self):
@@ -268,7 +273,10 @@ class DirEntry(ObjectWithStream):
 
     def getName(self):
         if '' != self.longName:
-            return ('\xff\xfe' + self.longName).decode('UTF-16').encode('cp1255').strip()
+            try:
+                return (self.longName).decode('UTF-16LE').encode('cp1255').strip()
+            except UnicodeEncodeError, e:
+                return "InvalidName_%s" % (self.longName.encode('hex'))
         return self.name.strip()
 
     def isRootDir(self):
@@ -284,82 +292,167 @@ class DirEntry(ObjectWithStream):
             return True
         return False
 
-def splitXGoldStream(data):
-    stream1 = StringIO()
-    stream2 = StringIO()
-    parts = len(data) // 0x10000
-    if 0 != (len(data) %  0x10000):
-        parts += 1
-    for i in range(parts):
-        stream1.write(data[0x10000 * i          :0x10000 * i +  0xf800])
-        stream2.write(data[0x10000 * i + 0xf800 :0x10000 * i + 0x10000])
-    stream1.seek(0,0)
-    stream2.seek(0,0)
-    return (stream1, stream2)
-
-def makePaddedImage(data):
-    output = StringIO()
-    stream = StringIO(data)
-    d = stream.read(0xf800)
-    line = 0
-    while d != '':
-        chunk_length = len(d)
-        if len(d) < 0xf800:
-            d += '\xff' * (0xf800 - len(d))
-        output.write(d)
-        for i in range(chunk_length // 0x200):
-            output.write(pack('<L', line))
-            output.write('\xff\x00')
-            output.write('\xff' * 10)
-            line += 1
-        for i in range(0x7c - (chunk_length / 0x200)):
-            output.write('\xff' * 32)
-        output.write('\xff' * 32)
-        output.write('\xff\xff\x00\xff')
-        output.write('\xff' * 12)
-        output.write('\xf0\xf0\x03\x00\x00\x00\xf0\xf0')
-        output.write('\xff' * 8)
-        d = stream.read(0xf800)
-    output.seek(0, 0)
-    return output
+def parseImage(data, isVerbose=False):
+    return FAT16(data, isVerbose=isVerbose)
 
 class FAT16(ObjectWithStream):
-    def __init__(self, data, hasPadding=False, isVerbose=True):
-        self.hasPadding = hasPadding
+    DCT4_NEW_CHUNK_HEADER    = 'f0f00001ff000000'.decode('hex')
+    DCT4_LAST_CHUNK_HEADER   = 'f0f00001ffc00000'.decode('hex')
+    DCT4_SECTOR_HEADER       = 'fff0ffff'.decode('hex')
+    #DCT4_SECTOR_LENGTH       = 0x200
+    DCT4_CHUNK_LENGTH        = 0x200 * 0xfc
+    DCT4_EMPTY_SECTOR        = '\xff' * 0x200
+    DCT4_EMPTY_SECTOR_HEADER = '\xff' * 0x8
+
+    def removeDCT4Padding(self):
+        stream1 = ObjectWithStream()
+        stream2 = ObjectWithStream()
+        self.seek(0, 0)
+        dataLength = len(self)
+        sectorId = 0
+        while self.tell() < dataLength:
+            if 0 == (self.tell() % self.DCT4_CHUNK_LENGTH):
+                chunkHeader = self.read(8)
+                if self.DCT4_LAST_CHUNK_HEADER == chunkHeader:
+                    # Last chunk
+                    pass
+                elif self.DCT4_NEW_CHUNK_HEADER == chunkHeader:
+                    # Another chunk
+                    pass
+                else:
+                    raise Exception("Invalid chunk in DCT4 Image")
+            header = self.read(0x4)
+            if header.startswith(self.DCT4_SECTOR_HEADER):
+                if header != self.DCT4_SECTOR_HEADER:
+                    raise Exception("Invalid DCT4 image padding")
+                chunkId = unpack('>L', self.read(0x4))[0]
+                if chunkId != sectorId:
+                    raise Exception("Out of sync - DCT4 image")
+                sectorId += 1
+                stream1.write(self.read(0x200))
+                stream2.write(header)
+            elif header.startswith(self.DCT4_EMPTY_SECTOR_HEADER):
+                emptySector = self.read(0x200)
+                if self.DCT4_EMPTY_SECTOR != emptySector:
+                    raise Exception("Invalid DCT4 image padding")
+                stream2.write(header)
+            else:
+                raise Exception("Invalid DCT4 image padding")
+        stream1.seek(0, 0)
+        stream2.seek(0, 0)
+        return (stream1, stream2)
+
+    def addDCT4Padding(self, data):
+        output = ObjectWithStream()
+        dataLength = len(data)
+        sectorId = 0
+        while dataLength < data.tell():
+            if data.tell() >= (dataLength - self.DCT4_CHUNK_LENGTH):
+                output.write(self.DCT4_LAST_CHUNK_HEADER)
+            else:
+                output.write(self.DCT4_NEW_CHUNK_HEADER)
+            for i in range(0, 0x200 * 0xfc, 0x200):
+                if data.tell() < dataLength:
+                    output.write(self.DCT4_SECTOR_HEADER)
+                    output.write(pack('>L', sectorId))
+                    sectorId += 1
+                    sector = data.read(0x200)
+                    if len(sector) < 0x200:
+                        sector += '\xff' * (0x200 - len(sector))
+                    output.write(sector)
+                else:
+                    output.write(self.DCT4_EMPTY_SECTOR_HEADER)
+                    output.write(self.DCT4_EMPTY_SECTOR)
+        output.seek(0, 0)
+        return output
+
+    def removeNewPadding(self):
+        stream1 = ObjectWithStream()
+        stream2 = ObjectWithStream()
+        self.seek(0, 0)
+        dataLength = len(self)
+        while self.tell() < dataLength:
+            stream1.write(self.read(0xf800))
+            stream2.write(self.read(0x200))
+        stream1.seek(0,0)
+        stream2.seek(0,0)
+        return (stream1, stream2)
+
+    def addNewPadding(self, stream):
+        output = ObjectWithStream()
+        d = stream.read(0xf800)
+        line = 0
+        while d != '':
+            chunk_length = len(d)
+            if len(d) < 0xf800:
+                d += '\xff' * (0xf800 - len(d))
+            output.write(d)
+            for i in range(chunk_length // 0x200):
+                output.write(pack('<L', line))
+                output.write('\xff\x00')
+                output.write('\xff' * 10)
+                line += 1
+            for i in range(0x7c - (chunk_length / 0x200)):
+                output.write('\xff' * 32)
+            output.write('\xff' * 32)
+            output.write('\xff\xff\x00\xff')
+            output.write('\xff' * 12)
+            output.write('\xf0\xf0\x03\x00\x00\x00\xf0\xf0')
+            output.write('\xff' * 8)
+            d = stream.read(0xf800)
+        output.seek(0, 0)
+        return output
+
+    def guessPaddingType(self):
+        if 'F0F00001FF000000FFF0FFFF00000000'.decode('hex') == self.peek(0x10):
+            return PADDING_TYPE_DCT4
+        self.seek(0xf800)
+        if '00000000FF00FFFFFFFFFFFFFFFFFFFF'.decode('hex') == self.peek(0x10):
+            return PADDING_TYPE_NEW
+        self.paddingType = PADDING_TYPE_NO_PADDING
+        return
+
+    def __init__(self, data, isVerbose=False):
         self.isVerbose = isVerbose
         if len(data) < 0x100:
             self.stream  = file(data, 'rb')
         else:
             self.stream = StringIO()
             self.stream.write(data)
-        stream = self.stream
-        stream.seek(0, 0)
-        if hasPadding:
-            data = stream.read()
-            self.stream1, self.stream2 = splitXGoldStream(data)
-            stream = self.stream1
-            self.stream = stream
-            stream.seek(0, 0)
+        self.seek(0, 0)
+        self.paddingType = self.guessPaddingType()
+        self.seek(0, 0)
+        if self.paddingType == PADDING_TYPE_NEW:
+            self.stream1, self.stream2 = self.removeNewPadding()
+            self.stream = self.stream1
+            self.seek(0, 0)
+        elif self.paddingType == PADDING_TYPE_DCT4:
+            self.stream1, self.stream2 = self.removeDCT4Padding()
+            self.stream = self.stream1
+            self.seek(0, 0)
+
+        if '\xeb\xfe' != self.peek(2):
+            raise Exception("Data doesn't seem like FAt16")
         self.clustersToFilesDic = {}
         self.parseHeaders()
-        if (self.bytesPerSector - stream.tell()) > 0:
-            self.bootSecPadding = stream.read(self.bytesPerSector - stream.tell())
+        if (self.bytesPerSector - self.tell()) > 0:
+            self.bootSecPadding = self.read(self.bytesPerSector - self.tell())
         else:
             self.bootSecPadding = ''
         self.bytesPerCluster = self.bytesPerSector * self.sectorsPerCluster
-        #self.reservedSectors = stream.read(self.reserverSectorsCount * self.bytesPerSector)
+        #self.reservedSectors = self.read(self.reserverSectorsCount * self.bytesPerSector)
         # Parse the FAT
-        self.printIfVerbos("Data starts at 0x%x" % stream.tell())
+        self.printIfVerbos("Data starts at 0x%x" % self.tell())
         if 2 != self.numOfTables:
             self.printIfVerbos("More than two tables stop parsing")
             return
         self.tables = []
         for i in range(self.numOfTables):
-            self.printIfVerbos("Table %d starts at 0x%x" % (i, stream.tell()))
-            tableData = stream.read(self.sectorsPerFAT * self.bytesPerSector)
+            self.printIfVerbos("Table %d starts at 0x%x" % (i, self.tell()))
+            tableData = self.read(self.sectorsPerFAT * self.bytesPerSector)
             table = unpack('<' + ('H' * (len(tableData) / 2)), tableData)
             table = list(table)
-            if 0 != (stream.tell() % self.bytesPerSector):
+            if 0 != (self.tell() % self.bytesPerSector):
                 print("! VTable padding error")
             self.tables.append(table)
         if self.tables[0] != self.tables[1]:
@@ -367,10 +460,10 @@ class FAT16(ObjectWithStream):
             print("! The two FATs do not match, using the first one")
         self.table = self.tables[0]
         # Parse root dir
-        self.printIfVerbos("Root dir starts at 0x%x" % stream.tell())
-        self._rootDirStart = stream.tell()
+        self.printIfVerbos("Root dir starts at 0x%x" % self.tell())
+        self._rootDirStart = self.tell()
         self._rootDirSize  = self.maxRootEntries * 0x20
-        self._rootDirData = stream.read(self._rootDirSize)
+        self._rootDirData = self.read(self._rootDirSize)
         self.rootDir = DirEntry( \
                 ( \
                     '/',
@@ -386,11 +479,11 @@ class FAT16(ObjectWithStream):
                     0), '/')
         content = self._parseDirAndUpdateParent(self._rootDirData, self.rootDir)
         self.rootDir.updateContent(content)
-        if 0 != (stream.tell() % self.bytesPerSector):
-            self.rootDirPadding = stream.read(abs(stream.tell() % (-self.bytesPerSector)))
+        if 0 != (self.tell() % self.bytesPerSector):
+            self.rootDirPadding = self.read(abs(self.tell() % (-self.bytesPerSector)))
         else:
             self.rootDirPadding = ''
-        self.dataStart = stream.tell()
+        self.dataStart = self.tell()
         self.firstDataSector = self.dataStart // self.bytesPerSector
         self.clustersToFilesDic[0] = self.rootDir
         self.printIfVerbos("Files data starts at: 0x%x" % self.dataStart)
@@ -423,16 +516,16 @@ class FAT16(ObjectWithStream):
         elif len(data) < self.bytesPerCluster:
             data += '\x00' * (self.bytesPerCluster - len(data))
         clusterOffset = self._getClusterOffset(cluster)
-        self.stream.seek(clusterOffset, 0)
-        self.stream.write(data)
+        self.seek(clusterOffset, 0)
+        self.write(data)
 
     def _writeRoot(self, data):
         if len(data) > self._rootDirSize:
             raise Exception("No room for data in root dir")
         elif len(data) < self._rootDirSize:
             data += '\x00' * (self.bytesPerCluster - len(data))
-        self.stream.seek(self._rootDirStart, 0)
-        self.stream.write(data)
+        self.seek(self._rootDirStart, 0)
+        self.write(data)
         self._rootDirData = data
 
     def readFile(self, path):
@@ -488,7 +581,7 @@ class FAT16(ObjectWithStream):
         return path, fname, fullPath
 
     def nameToUnicode(self, name):
-        return name.decode('cp1255').encode('utf-16')[2:]
+        return name.decode('cp1255').encode('utf-16LE')
 
     def createFile(self, fullPath, attrib=0x24, creationMicro=0, creationTime=0, creationDate=0, accessDate=0, updateTime=0, updateDate=0, firstCluster=None):
         if attrib & 0x10:
@@ -742,34 +835,34 @@ class FAT16(ObjectWithStream):
         header += self.jumpOpcode
         header += self.nopOpcode
         header += self.oemName
-        header += self.makeWord(self.bytesPerSector)
-        header += self.makeByte(self.sectorsPerCluster)
-        header += self.makeWord(self.reserverSectorsCount)
-        header += self.makeByte(self.numOfTables)
-        header += self.makeWord(self.maxRootEntries)
+        header += self.makeUInt16(self.bytesPerSector)
+        header += self.makeUInt8(self.sectorsPerCluster)
+        header += self.makeUInt16(self.reserverSectorsCount)
+        header += self.makeUInt8(self.numOfTables)
+        header += self.makeUInt16(self.maxRootEntries)
         totalSectors = self.totalSectors
         if totalSectors < 0x10000:
-            header += self.makeWord(totalSectors)
+            header += self.makeUInt16(totalSectors)
         else:
-            header += self.makeWord(0)
-        header += self.makeByte(self.mediaDescriptor)
-        header += self.makeWord(self.sectorsPerFAT)
-        header += self.makeWord(self.sectorsPerTrack)
-        header += self.makeWord(self.numOfHeads)
-        header += self.makeDword(self.hiddenSectors)
+            header += self.makeUInt16(0)
+        header += self.makeUInt8(self.mediaDescriptor)
+        header += self.makeUInt16(self.sectorsPerFAT)
+        header += self.makeUInt16(self.sectorsPerTrack)
+        header += self.makeUInt16(self.numOfHeads)
+        header += self.makeUInt32(self.hiddenSectors)
         if totalSectors >= 0x10000:
-            header += self.makeDword(totalSectors)
+            header += self.makeUInt32(totalSectors)
         else:
-            header += self.makeDword(totalSectors + self.hiddenSectors)
+            header += self.makeUInt32(totalSectors + self.hiddenSectors)
         # Extended BIOS parameter block
-        header += self.makeByte(self.physicalDriveNum)
-        header += self.makeByte(self.reserved)
-        header += self.makeByte(self.extendedBootSig)
-        header += self.makeDword(self.diskId)
+        header += self.makeUInt8(self.physicalDriveNum)
+        header += self.makeUInt8(self.reserved)
+        header += self.makeUInt8(self.extendedBootSig)
+        header += self.makeUInt32(self.diskId)
         header += self.volumeLabel
         header += self.fatType
         header += self.bootCode
-        header += self.makeWord(self.bootSectorSig)
+        header += self.makeUInt16(self.bootSectorSig)
         output.write(header)
 
         tableRaw = pack('<' + ('H' * len(self.table)), *self.table)
@@ -783,24 +876,24 @@ class FAT16(ObjectWithStream):
             rootDirRaw += '\x00' * (rootDirRawLength - len(rootDirRaw))
         output.write(rootDirRaw)
 
-        self.stream.seek(self.dataStart)
-        output.write(self.stream.read())
+        self.seek(self.dataStart)
+        output.write(self.read())
 
         output.seek(0, 0)
         if self.hasPadding:
-            output = makePaddedImage(output.read())
+            output = self.addNewPadding(output)
         return output.read()
 
     def readPadding(self, paddingLength):
         if 0 != paddingLength:
-            paddingZero = self.stream.read(paddingLength)
+            paddingZero = self.read(paddingLength)
             if paddingZero.count('\x00') != paddingLength:
                 raise Exception("Padded image error")
 
     def readModPadding(self, paddingMod=0x200):
-        paddingLength = abs(self.stream.tell() % (-paddingMod))
+        paddingLength = abs(self.tell() % (-paddingMod))
         if 0 != paddingLength:
-            paddingZero = self.stream.read(paddingLength)
+            paddingZero = self.read(paddingLength)
             if paddingZero.count('\x00') != paddingLength:
                 raise Exception("Padded image error")
 
@@ -829,6 +922,9 @@ class FAT16(ObjectWithStream):
     def _readFilesRecursively(self, dirObj):
         directory = dirObj.content
         for f in directory:
+            if '\xe5' == f.name[0]:
+                # File is deleted
+                continue
             if f.getName() in ['.', '..']:
                 raise Exception("Dot and DotDot were supposed to be filtered out")
             entryData = self.readFileByCluster(f.firstCluster)
@@ -847,18 +943,20 @@ class FAT16(ObjectWithStream):
                     f.content = []
                 else:
                     f.rawData = ''
-            firstCluster = f.firstCluster
 
     def _getClusterOffset(self, x):
         return self.dataStart + ((x - 2) * self.bytesPerCluster)
                 
     def _readCluster(self, x):
         clusterOffset = self._getClusterOffset(x)
-        self.stream.seek(clusterOffset, 0)
-        return self.stream.read(self.bytesPerCluster)
+        self.seek(clusterOffset, 0)
+        return self.read(self.bytesPerCluster)
 
     def _resolveParents(self, dirObj):
         if not dirObj.isDir():
+            return
+        if '\xe5' == dirObj.name[0]:
+            # Folder is deleted
             return
         if '/' != dirObj.name and None == dirObj.parent:
             if dirObj.parentCluster not in self.clustersToFilesDic:
@@ -1010,25 +1108,24 @@ class FAT16(ObjectWithStream):
             print text
 
     def parseHeaders(self):
-        stream = self.stream
-        self.jumpOpcode      = stream.read(2)           #   0
-        self.nopOpcode       = stream.read(1)           #   2
-        self.oemName         = stream.read(8)           #   3
-        self.bytesPerSector  = self.readWord()         #  11
-        self.sectorsPerCluster = self.readByte()       #  13
-        self.reserverSectorsCount = self.readWord()    #  14
-        self.numOfTables     = self.readByte()         #  16
-        self.maxRootEntries  = self.readWord()         #  17
-        self.totalSectors    = self.readWord()         #  19
-        self.mediaDescriptor = self.readByte()         #  21
-        self.sectorsPerFAT   = self.readWord()         #  22
-        self.sectorsPerTrack = self.readWord()         #  24
-        self.numOfHeads      = self.readWord()         #  26
-        self.hiddenSectors   = self.readDword()        #  28
+        self.jumpOpcode      = self.read(2)           #   0
+        self.nopOpcode       = self.read(1)           #   2
+        self.oemName         = self.read(8)           #   3
+        self.bytesPerSector  = self.readUInt16()         #  11
+        self.sectorsPerCluster = self.readUInt8()       #  13
+        self.reserverSectorsCount = self.readUInt16()    #  14
+        self.numOfTables     = self.readUInt8()         #  16
+        self.maxRootEntries  = self.readUInt16()         #  17
+        self.totalSectors    = self.readUInt16()         #  19
+        self.mediaDescriptor = self.readUInt8()         #  21
+        self.sectorsPerFAT   = self.readUInt16()         #  22
+        self.sectorsPerTrack = self.readUInt16()         #  24
+        self.numOfHeads      = self.readUInt16()         #  26
+        self.hiddenSectors   = self.readUInt32()        #  28
         if 0 == self.totalSectors:
-            self.totalSectors    = self.readDword()        #  32
+            self.totalSectors    = self.readUInt32()        #  32
         else:
-            self.extendedTotalSecotrs = self.readDword()
+            self.extendedTotalSecotrs = self.readUInt32()
         if self.isVerbose:
             print 'Jump Opcode: ' + self.jumpOpcode.encode('hex')
             print 'NOP Opcode: ' + self.nopOpcode.encode('hex')
@@ -1048,14 +1145,14 @@ class FAT16(ObjectWithStream):
 
         # Extended BIOS parameter block
         self.printIfVerbos( '--- Extended BIOS parameter block ---')
-        self.physicalDriveNum    = self.readByte()     #  36
-        self.reserved            = self.readByte()     #  37
-        self.extendedBootSig     = self.readByte()     #  38
-        self.diskId              = self.readDword()    #  39
-        self.volumeLabel         = stream.read(11)      #  43
-        self.fatType             = stream.read(8)       #  54
-        self.bootCode            = stream.read(448)     #  62
-        self.bootSectorSig       = self.readWord()
+        self.physicalDriveNum    = self.readUInt8()     #  36
+        self.reserved            = self.readUInt8()     #  37
+        self.extendedBootSig     = self.readUInt8()     #  38
+        self.diskId              = self.readUInt32()    #  39
+        self.volumeLabel         = self.read(11)      #  43
+        self.fatType             = self.read(8)       #  54
+        self.bootCode            = self.read(448)     #  62
+        self.bootSectorSig       = self.readUInt16()
         if self.isVerbose:
             print 'Physical drive number (0 to 0x80): 0x%x' % self.physicalDriveNum
             print 'Reserved: 0x%x' % self.reserved

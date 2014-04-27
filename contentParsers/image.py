@@ -1,15 +1,16 @@
 
 import os
+import sys
 import shutil
 from optparse import OptionParser
 
 from ..nokiaFile import NokiaFile
-from ..fat16.parser import FAT16
+from ..fat16.parser import parseImage as parseFAT16
 
-def patchImage(img, fat16, outputFile, PATCHES, isNewFormat):
+def patchImage(img, fat16, outputFile, PATCHES):
     fat16Patcher = Fat16Patcher(fat16)
     fat16Patcher.patch(PATCHES)
-    img.updateFat16(fat16, isNewImageFormat=isNewFormat)
+    img.updateFat16(fat16)
     img.pack()
 
 def main():
@@ -17,19 +18,16 @@ def main():
     userOptions.add_option("-p", "--patches",   dest="patchesFile", type="string", help="Python scriptin that defines global var PATCHES. The file would be executed!")
     userOptions.add_option("-i", "--input",     dest="inputFile",   type="string", help="Input Image file. It is also possible to set a global INPUT_FILE var in the PATCHES file")
     userOptions.add_option("-o", "--output",    dest="outputFile",  type="string", help="Output file. If not set the output file is dervid from the input file name")
-    userOptions.add_option("-z", "--newformat", dest="isNewFormat", action="store_true", help="Tell the ASAH parser to use the new file format. If regular parsing doesn't work, try to execute same command with this flag set")
     userOptions.add_option("-d", "--dump",      dest="isDump",      action="store_true", help="Dump files in image to disk")
     userOptions.add_option("-u", "--dumpDest",  dest="dumpDest",    type="string", help="Where to dump files from image")
     userOptions.add_option("-c", "--createIma", dest="createIma",   action="store_true", help="Create FAT16 image file")
     userOptions.add_option("-w", "--imageName", dest="imageName",   type="string", help="Destination FAT16 image file")
     userOptions.add_option("-v", "--verbose",   dest="isVerbose",   action="store_true", help="Set verbose output on")
-    userOptions.add_option("-h", "--help", action="help")
-    userOptions.set_defaults(inputFile=None, outputFile=None, isNewFormat=False, isVerbose=False)
-    (options, args) = userOptions.parse_args()
+    userOptions.set_defaults(inputFile=None, outputFile=None, isVerbose=False)
+    (options, args) = userOptions.parse_args(sys.argv[1:])
     patchesFile = options.patchesFile
     inputFile   = options.inputFile
     outputFile  = options.outputFile
-    isNewFormat = options.isNewFormat
     isDump      = options.isDump
     dumpDest    = options.dumpDest
     createIma   = options.createIma
@@ -68,21 +66,16 @@ def main():
     elif "IMAGE_FILE"   in globals() and None == imageName:
         imageName = IMAGE_FILE
     nokiaFile = NokiaFile(inputFile)
-    imageData = nokiaFile.extractPlain()
-    if (imageData[:2] != '\xeb\xfe'):
-        raise Exception("Data doesn't seem like FAT16 image")
-    try:
-        fat16 = FAT16(imageData)
-    except Exception, e:
-        print("Parsing error, attempting to parse as padded image")
-        fat16 = FAT16(imageData, hasPadding=True)
+    imageData = nokiaFile.extractPlain()[1]
+
+    img = parseFAT16(imageData, isVerbose=isVerbose)
 
     if None != patchesFile:
-        outputFile = patchImage(img, fat16, outputFile, PATCHES, isNewFormat=isNewFormat)
+        outputFile = patchImage(img, fat16, outputFile, PATCHES)
     if isDump:
-        img.dumpFat16ImageToDisk(dumpDest, isNewImageFormat=isNewFormat)
+        img.dumpTree(dumpDest)
     if createIma:
-        file(imageName, 'wb').write(fat16.make())
+        file(imageName, 'wb').write(img.make())
 
 if __name__ == "__main__":
     main()

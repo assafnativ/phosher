@@ -27,9 +27,9 @@ class BasicContainerParser(ContainerParser):
         for blobType, blobData in blobs:
             outputStream.writeUInt8(blobType)
             if blobType in [0x14, 0x54]:
-                blobAddr     = blobData[0]
+                blobAddr    = blobData[0]
                 endAddress  = blobData[1]
-                plainChunk = plain.readFromTo(blobAddr - address, endAddress - address)
+                plainChunk = plain[blobAddr - address:endAddress - address]
                 cipher = self.encrypt(blobAddr, plainChunk)
                 if 0x14 == blobType:
                     outputStream.write(self.createDataBlobType14(
@@ -119,7 +119,8 @@ class BasicContainerParser(ContainerParser):
         return (base, result)
 
     def extractPlain( self, blobs ):
-        return self.extractData(blobs)
+        data = self.extractData(blobs)
+        return (data[0], data[1].getRawData())
 
     def encrypt(self, address, plain):
         # Default - No encryption
