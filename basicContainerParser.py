@@ -112,10 +112,12 @@ class BasicContainerParser(ContainerParser):
                     base = address
                 offset = address - base
                 if result.tell() > offset:
-                    raise Exception("Overlapped blobs!")
+                    print "Overlapped blobs! (%x to %x) - Patching data" % (address, endAddress)
+                    result.seek(offset)
                 elif result.tell() < offset:
                     result.write('\xff' * (offset - result.tell()))
                 result.write(data.getRawData())
+                result.seek(0, 2)
         return (base, result)
 
     def extractPlain( self, blobs ):

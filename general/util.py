@@ -1,5 +1,6 @@
 
 import sys
+import struct
 
 def printIfVerbose( text, isVerbose ):
     if isVerbose:

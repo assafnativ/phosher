@@ -4,8 +4,8 @@ import sys
 import shutil
 from optparse import OptionParser
 
-from ..nokiaFile import NokiaFile
-from ..fat16.parser import parseImage as parseFAT16
+from phosher.nokiaFile import NokiaFile
+from phosher.fat16.parser import parseImage as parseFAT16
 
 def patchImage(img, fat16, outputFile, PATCHES):
     fat16Patcher = Fat16Patcher(fat16)
