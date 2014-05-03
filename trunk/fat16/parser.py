@@ -298,46 +298,54 @@ def parseImage(data, isVerbose=False):
 class FAT16(ObjectWithStream):
     DCT4_NEW_CHUNK_HEADER    = 'f0f00001ff000000'.decode('hex')
     DCT4_LAST_CHUNK_HEADER   = 'f0f00001ffc00000'.decode('hex')
+    DCT4_EMPTY_CHUNK_HEADER  = 'ffffffffffffffff'.decode('hex')
+    DCT4_CHUNK_FOOTER        = 'fffffffffffffffffffffffffffffffffffffffffffff0f0'.decode('hex')
     DCT4_SECTOR_HEADER       = 'fff0ffff'.decode('hex')
     #DCT4_SECTOR_LENGTH       = 0x200
-    DCT4_CHUNK_LENGTH        = 0x200 * 0xfc
     DCT4_EMPTY_SECTOR        = '\xff' * 0x200
-    DCT4_EMPTY_SECTOR_HEADER = '\xff' * 0x8
+    DCT4_EMPTY_SECTOR_HEADER = '\xff' * 0x4
+    DCT4_SECTORS_PER_CHUNK   = 0xfc
 
     def removeDCT4Padding(self):
         stream1 = ObjectWithStream()
         stream2 = ObjectWithStream()
         self.seek(0, 0)
         dataLength = len(self)
-        sectorId = 0
+        sectorsCount = 0
         while self.tell() < dataLength:
-            if 0 == (self.tell() % self.DCT4_CHUNK_LENGTH):
-                chunkHeader = self.read(8)
-                if self.DCT4_LAST_CHUNK_HEADER == chunkHeader:
-                    # Last chunk
-                    pass
-                elif self.DCT4_NEW_CHUNK_HEADER == chunkHeader:
-                    # Another chunk
-                    pass
+            chunkHeader = self.read(8)
+            if self.DCT4_LAST_CHUNK_HEADER == chunkHeader:
+                isLastChunk = True
+                pass
+            elif self.DCT4_NEW_CHUNK_HEADER == chunkHeader:
+                isLastChunk = False
+                pass
+            elif isLastChunk and self.DCT4_EMPTY_CHUNK_HEADER != chunkHeader:
+                raise Exception("Invalid chunk in DCT4 Image")
+            for i in range(self.DCT4_SECTORS_PER_CHUNK):
+                if self.tell() >= dataLength:
+                    break
+                header = self.read(0x4)
+                if header.startswith(self.DCT4_SECTOR_HEADER):
+                    if header != self.DCT4_SECTOR_HEADER:
+                        raise Exception("Invalid DCT4 image padding")
+                    sectorId = unpack('>L', self.read(0x4))[0]
+                    if sectorId != sectorsCount:
+                        raise Exception("Out of sync - DCT4 image")
+                    sectorId += 1
+                    stream1.write(self.read(0x200))
+                    stream2.write(header)
+                elif header.startswith(self.DCT4_EMPTY_SECTOR_HEADER):
+                    emptySector = self.read(0x200)
+                    if (self.DCT4_EMPTY_SECTOR != emptySector) and (len(emptySector) == len(self.DCT4_EMPTY_SECTOR)):
+                        raise Exception("Invalid DCT4 image padding")
+                    stream2.write(header)
                 else:
-                    raise Exception("Invalid chunk in DCT4 Image")
-            header = self.read(0x4)
-            if header.startswith(self.DCT4_SECTOR_HEADER):
-                if header != self.DCT4_SECTOR_HEADER:
                     raise Exception("Invalid DCT4 image padding")
-                chunkId = unpack('>L', self.read(0x4))[0]
-                if chunkId != sectorId:
-                    raise Exception("Out of sync - DCT4 image")
-                sectorId += 1
-                stream1.write(self.read(0x200))
-                stream2.write(header)
-            elif header.startswith(self.DCT4_EMPTY_SECTOR_HEADER):
-                emptySector = self.read(0x200)
-                if self.DCT4_EMPTY_SECTOR != emptySector:
-                    raise Exception("Invalid DCT4 image padding")
-                stream2.write(header)
-            else:
-                raise Exception("Invalid DCT4 image padding")
+                sectorsCount += 1
+            chunkFooter = self.read(0x18)
+            if not isLastChunk and self.DCT4_CHUNK_FOOTER != chunkFooter:
+                raise Exception("Wrong chunk footer")
         stream1.seek(0, 0)
         stream2.seek(0, 0)
         return (stream1, stream2)
@@ -351,7 +359,7 @@ class FAT16(ObjectWithStream):
                 output.write(self.DCT4_LAST_CHUNK_HEADER)
             else:
                 output.write(self.DCT4_NEW_CHUNK_HEADER)
-            for i in range(0, 0x200 * 0xfc, 0x200):
+            for i in range(0xfc):
                 if data.tell() < dataLength:
                     output.write(self.DCT4_SECTOR_HEADER)
                     output.write(pack('>L', sectorId))
@@ -363,6 +371,7 @@ class FAT16(ObjectWithStream):
                 else:
                     output.write(self.DCT4_EMPTY_SECTOR_HEADER)
                     output.write(self.DCT4_EMPTY_SECTOR)
+            output.write(self.DCT4_CHUNK_FOOTER)
         output.seek(0, 0)
         return output
 

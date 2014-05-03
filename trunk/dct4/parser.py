@@ -91,13 +91,13 @@ class DCT4(BasicContainerParser):
         bytesSum = self.generateBytesSum8Bit(data.getRawData())
         bytesSum = (bytesSum + 1) & 0xff
         if dataCheck != bytesSum:
-            raise Exception("Data check error! (%x)" % dataCheck)
+            print "Data check error! (%x != %x)" % (dataCheck, bytesSum)
         data.seek(0)
         return data
 
     def parseBlob( self, blobType, dataStream ):
+        pos = dataStream.tell()
         if 0x14 == blobType:
-            pos = dataStream.tell()
             dataStream.pushOffset()
             address = dataStream.readUInt32()
             dataCheck = dataStream.readUInt8()
@@ -114,8 +114,12 @@ class DCT4(BasicContainerParser):
             blobData.seek(0)
             data = self.parseDataBlob(blobData, dataCheck)
             return (address, address + blobLength, data)
+        elif 0xff == blobType:
+            trailData = dataStream.read()
+            print "Found trail data at %x of %s" % (pos, trailData.encode('hex'))
         else:
-            raise Exception("Don't know how to parse blob of type %x in file type %x" % (blobType, self.fileType))
+            raise Exception("Don't know how to parse blob of type %x in file type %x at offset %x" %
+                            (blobType, self.fileType, pos))
 
     def extractPlain( self, blobs ):
         address, extractedData = self.extractData(blobs)

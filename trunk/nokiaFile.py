@@ -22,7 +22,9 @@ class NokiaFile(ParserInterface):
             self.isBigEndian = True
 
     def setEndiantiyByFileType(self, fileType):
-        if fileType in [0xa2, 0xb2]:
+        if fileType in [0xa0, 0xa1]:
+            self.isBigEndian = True
+        elif fileType in [0xa2, 0xb2]:
             self.guessEndianity()
         elif 0x91 == self.fileType:
             self.isBigEndian = False
@@ -44,7 +46,11 @@ class NokiaFile(ParserInterface):
         self.fileStream.seek(1, 0)
 
         # Set the right parser for this file type
-        if 0xA2 == self.fileType:
+        if self.fileType in [0xa0, 0xa1]:
+            # No container
+            self.containerParser = None
+            self.address = 0
+        elif 0xA2 == self.fileType:
             self.containerParser = DCT4(self.fileStream, self.isBigEndian, isVerbose=self.isVerbose)
         elif 0xB2 == self.fileType:
             self.containerParser = BB5(self.fileStream, self.isBigEndian, isVerbose=self.isVerbose)
@@ -53,30 +59,40 @@ class NokiaFile(ParserInterface):
         else:
             raise Exception('File type %x not supported' % self.fileType)
 
-        # Read the tokens
-        self.tokens = self.containerParser.readTokens(self.fileStream)
+        if None == self.containerParser:
+            self.plain = self.fileStream.read()
+        else:
+            # Read the tokens
+            self.tokens = self.containerParser.readTokens(self.fileStream)
 
-        # Parse blobs
-        self.blobs = self.containerParser.readBlobs(self.fileStream)
+            # Parse blobs
+            self.blobs = self.containerParser.readBlobs(self.fileStream)
 
-        self.address, self.extractedData = self.containerParser.extractData(self.blobs)
-        self.endAddress = self.address + len(self.extractedData)
+            self.address, self.extractedData = self.containerParser.extractData(self.blobs)
+            self.endAddress = self.address + len(self.extractedData)
 
-        # Parse things that are special for this file type
-        plainAddress, self.plain = self.extractPlain()
-        if (plainAddress != self.address):
-            raise Exception("This scenario is not supported at the moment")
+            # Parse things that are special for this file type
+            plainAddress, self.plain = self.extractPlain()
+            if (plainAddress != self.address):
+                raise Exception("This scenario is not supported at the moment")
 
     def encode( self ):
-        blobsData = self.ObjectWithStream()
-        self.containerParser.writeBlobs(blobsData, self.blobs, self.address, self.plain)
-        self.blobsDataLength = len(blobsData)
-        tokensData = self.ObjectWithStream()
-        self.containerParser.writeTokens(tokensData, self.tokens, blobsData)
-        return chr(self.fileType) + tokensData.getRawData() + blobsData.getRawData()
+        if None == self.containerParser:
+            return chr(self.fileType) + self.plain
+        else:
+            blobsData = self.ObjectWithStream()
+            self.containerParser.writeBlobs(blobsData, self.blobs, self.address, self.plain)
+            self.blobsDataLength = len(blobsData)
+            tokensData = self.ObjectWithStream()
+            self.containerParser.writeTokens(tokensData, self.tokens, blobsData)
+            return chr(self.fileType) + tokensData.getRawData() + blobsData.getRawData()
 
     def extractData(self):
+        if None == self.containerParser:
+            return self.plain
         return self.containerParser.extractData(self.blobs)
 
     def extractPlain(self):
+        if None == self.containerParser:
+            return self.plain
         return self.containerParser.extractPlain(self.blobs)
