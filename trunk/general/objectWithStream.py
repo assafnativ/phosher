@@ -50,7 +50,7 @@ class ObjectWithStream(object):
         result = 0
         while continueBit:
             result <<= 7
-            nextByte = self.readByte()
+            nextByte = self.readUInt8()
             result += (nextByte & 0x7f)
             continueBit = nextByte & 0x80
         return result
