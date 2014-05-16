@@ -6,12 +6,8 @@ from optparse import OptionParser
 
 from phosher.nokiaFile import NokiaFile
 from phosher.fat16.parser import parseImage as parseFAT16
-
-def patchImage(img, fat16, outputFile, PATCHES):
-    fat16Patcher = Fat16Patcher(fat16)
-    fat16Patcher.patch(PATCHES)
-    img.updateFat16(fat16)
-    img.pack()
+from phosher.fat16.patcher import Fat16Patcher
+from phosher.general.util import *
 
 def main():
     userOptions = OptionParser()
@@ -33,49 +29,32 @@ def main():
     createIma   = options.createIma
     imageName   = options.imageName
     isVerbose   = options.isVerbose
-    if None != patchesFile:
-        if not os.path.isfile(patchesFile):
-            userOptions.error("Patches file not found")
-        execfile(patchesFile)
-    if "INPUT_FILE" not in globals() and None == inputFile:
-        userOptions.error("Please set the input file either in command line or in the PATCHES file")
-    if "INPUT_FILE" in globals() and None == inputFile:
-        # Command line overwrites PATCHES file
-        inputFile = INPUT_FILE
-    if not os.path.isfile(inputFile):
-        userOptions.error("Invalid input file %s" % inputFile)
-    if "OUTPUT_FILE" not in globals() and None == outputFile:
-        # Derive the output file name from the input file name
-        outputPath = os.path.dirname(inputFile)
-        outputFile = os.path.basename(inputFile)
-        pos = outputFile.rfind(".")
-        if "-1" != pos:
-            outputFile = outputFile[:pos] + ".patched" + outputFile[pos:]
-        else:
-            outputFile = outputFile + ".patched"
-    elif "OUTPUT_FILE" in globals() and None == outputFile:
-        outputFile = OUTPUT_FILE
-    if "IS_NEW_FORMAT" in globals():
-        newFormat = IS_NEW_FORMAT
-    if "DUMP_DEST" not in globals() and None == dumpDest:
+    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose)
+    inputFile = cmdLineInputFile(patchesDefines, inputFile, userOptions)
+    outputFile = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
+    if "DUMP_DEST" not in patchesDefines and None == dumpDest:
         dumpDest = inputFile + '_DUMP'
-    elif "DUMP_DEST"   in globals() and None == dumpDest:
-        dumpDest = DUMP_DEST
-    if "IMAGE_FILE" not in globals() and None == imageName:
+    elif "DUMP_DEST"   in patchesDefines and None == dumpDest:
+        dumpDest = patchesDefines["DUMP_DEST"]
+    if "IMAGE_FILE" not in patchesDefines and None == imageName:
         imageName = inputFile + '.ima'
-    elif "IMAGE_FILE"   in globals() and None == imageName:
+    elif "IMAGE_FILE"   in patchesDefines and None == imageName:
         imageName = IMAGE_FILE
-    nokiaFile = NokiaFile(inputFile)
-    imageData = nokiaFile.extractPlain()[1]
+    nokiaFile = NokiaFile(inputFile, isVerbose=isVerbose)
+    imageData = nokiaFile.plain
 
-    img = parseFAT16(imageData, isVerbose=isVerbose)
+    fat16 = parseFAT16(imageData, isVerbose=isVerbose)
 
     if None != patchesFile:
-        outputFile = patchImage(img, fat16, outputFile, PATCHES)
+        fat16Patcher = Fat16Patcher(fat16)
+        fat16Patcher.patch(PATCHES)
     if isDump:
-        img.dumpTree(dumpDest)
+        fat16.dumpTree(dumpDest)
+    imageData = fat16.make()
     if createIma:
-        file(imageName, 'wb').write(img.make())
+        file(imageName, 'wb').write(imageData)
+    nokiaFile.plain = imageData
+    file(outputFile, 'wb').write(nokiaFile.encode())
 
 if __name__ == "__main__":
     main()

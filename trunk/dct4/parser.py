@@ -6,7 +6,7 @@ from ..general.objectWithStream import *
 from .wordsPermTable import *
 from .inversWordsPermTable import *
 
-from struct import unpack, pack
+from struct import unpack
 import scipy
 
 class DCT4(BasicContainerParser):
@@ -113,7 +113,7 @@ class DCT4(BasicContainerParser):
             blobData = self.ObjectWithStream(dataStream.read(blobLength))
             blobData.seek(0)
             data = self.parseDataBlob(blobData, dataCheck)
-            return (address, address + blobLength, data)
+            return (address, blobLength, data)
         elif 0xff == blobType:
             trailData = dataStream.read()
             print "Found trail data at %x of %s" % (pos, trailData.encode('hex'))
@@ -150,7 +150,7 @@ class DCT4(BasicContainerParser):
             plain = extractedData
         return (address, plain.getRawData())
 
-    def encrypt(self, address, plain):
+    def packData(self, address, plain):
         endAddress = address + len(plain)
         if 0 == len(plain):
             raise Exception("No plain data!")

@@ -70,7 +70,7 @@ class ContainerParser( object ):
         raise NotImplementedError("Pure function call")
 
     @abstractmethod
-    def encrypt(self, address, plain):
+    def packData(self, address, plain):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 

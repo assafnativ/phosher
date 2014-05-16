@@ -23,14 +23,71 @@ class BasicContainerParser(ContainerParser):
             blobs.append((blobType, blobData))
         return blobs
 
+    def updateBlobs(self, blobs, address, plain):
+        if len(blobs) < 3:
+            # I probebly don't know how to update this
+            return blobs
+        # Get normal length for blob
+        blobType, blobData = blobs[-2]
+        if blobType not in [0x14, 0x54]:
+            # I don't want to get the normal length of blob from this blob
+            return blobs
+        normalLength = blobData[1]
+        endAddress = address + len(plain)
+        blobType, blobData = blobs[-1]
+        blobData = list(blobData)
+        currentEnd = blobData[0] + blobData[1]
+        if endAddress < currentEnd:
+            needToRemove = currentEnd - endAddress
+            while needToRemove > 0:
+                blobType, blobData = blobs[-1]
+                blobData = list(blobData)
+                blobLen = blobData[1]
+                if needToRemove > blobLen:
+                    needToRemove -= blobLen
+                    blobs = blobs[:-1]
+                else:
+                    blobData[1] = blobData[0] + needToRemove
+                    blobs[-1] = (blobType, blobData)
+                    needToRemove = 0
+        elif endAddress > currentEnd:
+            needToAdd = endAddress - currentEnd
+            while needToAdd > 0:
+                blobType, blobData = blobs[-1]
+                blobData = list(blobData)
+                blobLen = blobData[1]
+                if blobLen < normalLength:
+                    canAddToBlob = normalLength - blobLen
+                    if canAddToBlob > needToAdd:
+                        blobLen     += needToAdd
+                        needToAdd    = 0
+                        blobData[1]  = blobLen
+                        blobs[-1]    = (blobType, tuple(blobData))
+                    else:
+                        blobLen     += canAddToBlob
+                        needToAdd   -= canAddToBlob
+                        blobData[1]  = blobLen
+                        blobs[-1]    = (blobType, tuple(blobData))
+                elif blobLen == normalLength:
+                    newBlobData = blobData[:]
+                    newBlobData[0] = blobData[0] + blobData[1]
+                    newBlobData[1] = min(normalLength, needToAdd)
+                    needToAdd -= newBlobData[1]
+                    blobs.append((blobType, tuple(newBlobData)))
+                else:
+                    raise Exception("Not expecting blob of that size")
+        return blobs
+
     def writeBlobs( self, outputStream, blobs, address, plain ):
+        blobs = self.updateBlobs(blobs, address, plain)
         for blobType, blobData in blobs:
             outputStream.writeUInt8(blobType)
             if blobType in [0x14, 0x54]:
                 blobAddr    = blobData[0]
-                endAddress  = blobData[1]
+                blobLen     = blobData[1]
+                endAddress  = blobAddr + blobLen
                 plainChunk = plain[blobAddr - address:endAddress - address]
-                cipher = self.encrypt(blobAddr, plainChunk)
+                cipher = self.packData(blobAddr, plainChunk)
                 if 0x14 == blobType:
                     outputStream.write(self.createDataBlobType14(
                         cipher, blobAddr).getRawData())
@@ -107,7 +164,8 @@ class BasicContainerParser(ContainerParser):
         result = self.ObjectWithStream()
         for blobType, blob in blobs:
             if blobType in [0x54, 0x14]:
-                address, endAddress, data = (blob[0], blob[1], blob[2])
+                address, blobLen, data = (blob[0], blob[1], blob[2])
+                endAddress = address + blobLen
                 if None == base:
                     base = address
                 offset = address - base
@@ -124,7 +182,7 @@ class BasicContainerParser(ContainerParser):
         data = self.extractData(blobs)
         return (data[0], data[1].getRawData())
 
-    def encrypt(self, address, plain):
+    def packData(self, address, plain):
         # Default - No encryption
         return plain
 

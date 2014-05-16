@@ -1,4 +1,5 @@
 
+import os
 import sys
 import struct
 
@@ -29,7 +30,6 @@ def DATA( data, base = 0, itemsInRow=0x10 ):
         line += '\n'
         result += line
     return( result )
-
 
 def hex2data( h ):
     if h[:2] == '0x':
@@ -122,3 +122,50 @@ def exceptionUp(step=1):
             #print("Adding: %s" % item)
             setattr(__main__, item, l[item])
 
+def cmdLineInputFile(allGlobals, inputFile, userOptions):
+    if "INPUT_FILE" not in allGlobals and None == inputFile:
+        userOptions.error("Please set the input file either in command line or in the PATCHES file")
+    if "INPUT_FILE" in allGlobals and None == inputFile:
+        # Command line overwrites PATCHES file
+        inputFile = allGlobals["INPUT_FILE"]
+    if not os.path.isfile(inputFile):
+        userOptions.error("Invalid input file %s" % inputFile)
+    return inputFile
+
+def cmdLineOutputFile(allGlobals, outputFile, inputFile):
+    if "OUTPUT_FILE" not in allGlobals and None == outputFile:
+        # Derive the output file name from the input file name
+        outputPath = os.path.dirname(inputFile)
+        outputFile = os.path.basename(inputFile)
+        pos = outputFile.rfind(".")
+        if -1 != pos:
+            outputFile = outputFile[:pos] + ".patched" + outputFile[pos:]
+        else:
+            outputFile = outputFile + ".patched"
+        if '' != outputPath:
+            outputFile = os.sep.join([outputPath, outputFile])
+    elif "OUTPUT_FILE" in allGlobals and None == outputFile:
+        outputFile = allGlobals["OUTPUT_FILE"]
+    return outputFile
+
+def cmdLineDumpDestFile(allGlobals, dumpDest, outputFile, plainAddr):
+    if "DUMP_DEST" not in allGlobals and None == dumpDest:
+        dumpDest = outputFile + '.' + hex(plainAddr) + '.plain'
+    elif "DUMP_DEST"   in allGlobals and None == dumpDest:
+        dumpDest = allGlobals['DUMP_DEST']
+    return dumpDest
+
+def loadPatchesFromFile(patchesFile, userOptions, isVerbose):
+    if None != patchesFile:
+        if not os.path.isfile(patchesFile):
+            userOptions.error("Patches file not found")
+        printIfVerbose("Exexuting Python script: %s" % patchesFile, isVerbose)
+        patchesDefines = {}
+        execfile(patchesFile, patchesDefines)
+        if 'PATCHES' not in patchesDefines:
+            raise Exception("Patches file did not define PATCHES")
+        PATCHES = patchesDefines["PATCHES"]
+    else:
+        patchesDefines = {}
+        PATCHES = None
+    return PATCHES, patchesDefines
