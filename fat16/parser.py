@@ -1,7 +1,6 @@
 
 from ..general.objectWithStream import *
 
-from cStringIO import *
 from struct import pack, unpack
 import time
 import copy
@@ -136,7 +135,7 @@ class DirEntry(ObjectWithStream):
             raise Exception("Parent folder not set yet")
         if self.isLink():
             raise Exception("Trying to serialize a link")
-        folderData = StringIO()
+        folderData = ObjectWithStream()
         if 0xff != self.attributes:
             # Add . and ..
             folderData.write(self.makeDotEntry())
@@ -426,7 +425,7 @@ class FAT16(ObjectWithStream):
         if len(data) < 0x100:
             self.stream  = file(data, 'rb')
         else:
-            self.stream = StringIO()
+            self.stream = ObjectWithStream()
             self.stream.write(data)
         self.seek(0, 0)
         self.paddingType = self.guessPaddingType()
@@ -839,7 +838,7 @@ class FAT16(ObjectWithStream):
         self._writeRoot(data)
 
     def make(self):
-        output = StringIO()
+        output = ObjectWithStream()
         header = ''
         header += self.jumpOpcode
         header += self.nopOpcode
@@ -889,7 +888,9 @@ class FAT16(ObjectWithStream):
         output.write(self.read())
 
         output.seek(0, 0)
-        if self.hasPadding:
+        if self.paddingType == PADDING_TYPE_DCT4:
+            output = self.addDCT4Padding(output)
+        if self.paddingType == PADDING_TYPE_NEW:
             output = self.addNewPadding(output)
         return output.read()
 
@@ -980,7 +981,7 @@ class FAT16(ObjectWithStream):
 
     def _parseDirAndUpdateParent(self, dirData, dirObj):
         if isinstance(dirData, str):
-            stream = StringIO(dirData)
+            stream = ObjectWithStream(dirData)
         else:
             stream = dirData
         lastNameIndex = 0

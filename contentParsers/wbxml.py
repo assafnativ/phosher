@@ -198,7 +198,7 @@ class WBXML(ObjectWithStream):
     def build(self, isVerbose=False):
         # This function requires more work
         result = ObjectWithStream()
-        result.writeByte(self.version)
+        result.writeUInt8(self.version)
         result.writeMBInt(self.publicId)
         result.writeMBInt(self.charset)
         result.writeMBInt(self.strtbl_len)
@@ -244,10 +244,10 @@ class WBXML(ObjectWithStream):
             raise Exception("Empty tags")
         for tagId, attrbis, val, content, _ in tags:
             tagCode = tagId
-            if tagCode in TOKENS_REVESRE:
+            if tagCode in self.TOKENS_REVESRE:
                 token = tagCode
-                tagCode = TOKENS_REVESRE[tagCode]
-                result.writeByte(tagCode)
+                tagCode = self.TOKENS_REVESRE[tagCode]
+                result.writeUInt8(tagCode)
                 if 'STR_I' == token:
                     result.write(val + '\x00')
                 elif 'STR_T' == token:
@@ -276,7 +276,7 @@ class WBXML(ObjectWithStream):
                     result.writeMBInt(val)
                 elif 'SWITCH_PAGE' == token:
                     codePage = int(val[val.find('(')+1:val.find(')')])
-                    result.writeByte(codePage)
+                    result.writeUInt8(codePage)
                 elif 'END' == token:
                     pass
                 else:
@@ -286,13 +286,13 @@ class WBXML(ObjectWithStream):
                     tagCode |= 0x40
                 if None != attrbis and 0 < len(attrbis):
                     tagCode |= 0x80
-                result.writeByte(tagCode)
+                result.writeUInt8(tagCode)
                 if 0 != (tagCode & 0x80):
                     self._build(result, attrbis, False, currentCodePage)
                 if 0 != (tagCode & 0x40):
                     self._build(result, content, True, currentCodePage)
         # Write END token
-        result.writeByte(1)
+        result.writeUInt8(1)
 
     def stringFromTable(self, offset):
         self.strtbl.seek(offset, 0)
@@ -334,26 +334,9 @@ def main():
     outputFile  = options.outputFile
     isText      = options.isText
     isVerbose   = options.isVerbose
-    if None != patchesFile:
-        if not os.path.isfile(patchesFile):
-            userOptions.error("Patches file not found")
-        execfile(patchesFile)
-    if "INPUT_FILE" not in globals() and None == inputFile:
-        userOptions.error("Please set the input file either in command line or in the PATCHES file")
-    if "INPUT_FILE" in globals() and None == inputFile:
-        # Command line overwrites PATCHES file
-        inputFile = INPUT_FILE
-    if not os.path.isfile(inputFile):
-        userOptions.error("Invalid input file %s" % inputFile)
-    if "OUTPUT_FILE" not in globals() and None == outputFile:
-        # Derive the output file name from the input file name
-        outputPath = os.path.dirname(inputFile)
-        outputFile = os.path.basename(inputFile)
-        pos = outputFile.rfind(".")
-        if "-1" != pos:
-            outputFile = outputFile[:pos] + ".patched" + outputFile[pos:]
-        else:
-            outputFile = outputFile + ".patched"
+    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose)
+    inputFile = cmdLineInputFile(patchesDefines, inputFile, userOptions)
+    outputFile = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
 
     data = file(inputFile, 'rb').read()
     wbxml = WBXML(data, isVerbose=isVerbose)

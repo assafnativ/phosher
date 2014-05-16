@@ -32,7 +32,7 @@ class BB5(BasicContainerParser):
             blobData = self.ObjectWithStream(dataStream.read(blobLength))
             blobData.seek(0)
             data = self.parseDataBlob(blobData, dataCheck)
-            return (address, address + blobLength, data, subType, flashId, someFlag, extraBytes)
+            return (address, blobLength, data, subType, flashId, someFlag, extraBytes)
         else:
             raise Exception("Don't know how to parse blob of type %x in file type %x" % (blobType, self.fileType))
 
@@ -42,4 +42,5 @@ class BB5(BasicContainerParser):
 
     def encodeTokens(selfs, tokens):
         return tokens
+
 
