@@ -1,1 +1,1 @@
-__all__ = ['image']
+__all__ = ['image', 'ppm', 'mcusw', 'wbxml']

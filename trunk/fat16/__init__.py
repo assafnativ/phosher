@@ -1,1 +1,1 @@
-__all__ = ['fat16', 'patcher']
+__all__ = ['parser', 'patcher']
