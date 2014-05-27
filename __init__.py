@@ -1,12 +1,12 @@
 __all__ = [
-        'general',
         'asha',
         'bb5',
         'dct4',
+        'contentParsers',
+        'fat16',
         'crypto',
-        'image',
-        'mcusw',
-        'ppm',
+        'general',
         'interfaces',
         'nokiaFile',
-        'basicContainerParser' ]
+        'basicContainerParser',
+        'nokiaPhosher' ]

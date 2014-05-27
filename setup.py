@@ -5,24 +5,22 @@ from distutils.core import setup
 
 packagesNames = [
         'phosher', 
-        'phosher\\general',
-        'phosher\\asha', 
-        'phosher\\bb5', 
-        'phosher\\dct4', 
-        'phosher\\crypto', 
+        'phosher\\asha',
+        'phosher\\bb5',
+        'phosher\\dct4',
+        'phosher\\contentParsers',
         'phosher\\fat16',
-        'phosher\\image',
-        ]
+        'phosher\\crypto',
+        'phosher\\general' ]
 packagesDirs = {
         'phosher' : '.', 
-        'phosher\\general'  : 'general',
-        'phosher\\asha'     : 'asha',
-        'phosher\\bb5'      : 'bb5',
-        'phosher\\dct4'     : 'dct4',
-        'phosher\\crypto'   : 'crypto',
-        'phosher\\fat16'    : 'fat16',
-        'phosher\\image'    : 'image',
-        }
+        'phosher\\asha' : "asha",
+        'phosher\\bb5' : "bb5",
+        'phosher\\dct4' : "dct4",
+        'phosher\\contentParsers' : "contentParsers",
+        'phosher\\fat16' : "fat16",
+        'phosher\\crypto' : "crypto",
+        'phosher\\general' : "general" }
 setup(
         name = "phosher",
         version = "1.0",
