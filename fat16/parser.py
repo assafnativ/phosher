@@ -440,7 +440,7 @@ class FAT16(ObjectWithStream):
             self.seek(0, 0)
 
         if '\xeb\xfe' != self.peek(2):
-            raise Exception("Data doesn't seem like FAt16")
+            raise Exception("Data doesn't seem like FAT16")
         self.clustersToFilesDic = {}
         self.parseHeaders()
         if (self.bytesPerSector - self.tell()) > 0:
