@@ -15,26 +15,57 @@ class BB5(BasicContainerParser):
         data.seek(0)
         return data
 
+    def validateHeader(self, data, length):
+        header = data.read(length)
+        calcHeaderSum = self.generateBytesSum8Bit(header)
+        headerSum = data.readUInt8()
+        if calcHeaderSum != headerSum:
+            raise Exception("Header check sum failed (%x != %x)" % (calcHeaderSum, headerSum))
+
     def parseBlob( self, blobType, dataStream ):
-        if 0x54 == blobType:
+        if blobType in [0x54, 0x5d]:
+            dataStream.pushOffset()
             subType = dataStream.readUInt16()
             headerLength = dataStream.readUInt8()
-            flashId = [ord(x) for x in dataStream.read(3)]
-            dataCheck = dataStream.readUInt16()
-            someFlag = dataStream.readUInt8()
-            if 0xe < headerLength:
-                extraBytes = dataStream.read(headerLength - 0xe)
+            if 0x54 == blobType:
+                flashId = [ord(x) for x in dataStream.read(3)]
+                dataCheck   = dataStream.readUInt16()
+                someFlag    = dataStream.readUInt8()
+                if 0xe < headerLength:
+                    extraBytes = dataStream.read(headerLength - 0xe)
+                else:
+                    extraBytes = ''
+                blobLength  = dataStream.readUInt32()
+                address     = dataStream.readUInt32()
+                dataStream.popOffset()
+                self.validateHeader(dataStream, headerLength + 3)
+                blobData = self.ObjectWithStream(dataStream.read(blobLength))
+                blobData.seek(0)
+                data = self.parseDataBlob(blobData, dataCheck)
+                return (address, blobLength, data, subType, flashId, someFlag, extraBytes)
+            elif 0x5d == blobType:
+                sha1Digest  = dataStream.read(0x14)
+                name        = dataStream.read(0xc).replace('\x00', '')
+                someFlags   = [ord(x) for x in dataStream.read(3)]
+                dataCheck   = dataStream.readUInt16()
+                blobLength  = dataStream.readUInt32()
+                address     = dataStream.readUInt32()
+                if headerLength > 0x2d:
+                    anotherSha1 = dataStream.read(0x14)
+                    extraBytes = dataStream.read(headerLength - 0x2d - 0x14)
+                else:
+                    anotherSha1 = None
+                    extraBytes = ''
+                dataStream.popOffset()
+                self.validateHeader(dataStream, headerLength + 3)
+                blobData = self.ObjectWithStream(dataStream.read(blobLength))
+                blobData.seek(0)
+                data = self.parseDataBlob(blobData, dataCheck)
+                return (address, blobLength, data, subType, someFlags, sha1Digest, name, anotherSha1, extraBytes)
             else:
-                extraBytes = ''
-            blobLength = dataStream.readUInt32()
-            address = dataStream.readUInt32()
-            headerSum = dataStream.readUInt8()
-            blobData = self.ObjectWithStream(dataStream.read(blobLength))
-            blobData.seek(0)
-            data = self.parseDataBlob(blobData, dataCheck)
-            return (address, blobLength, data, subType, flashId, someFlag, extraBytes)
+                raise Exception("WTF")
         else:
-            raise Exception("Don't know how to parse blob of type %x in file type %x" % (blobType, self.fileType))
+            raise Exception("Don't know how to parse blob of type %x in file type %x (@%x)" % (blobType, self.fileType, dataStream.tell()))
 
     def decodeTokens(self, data):
         # Don't know how to decode BB5 tokens
