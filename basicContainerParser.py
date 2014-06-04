@@ -82,7 +82,7 @@ class BasicContainerParser(ContainerParser):
         blobs = self.updateBlobs(blobs, address, plain)
         for blobType, blobData in blobs:
             outputStream.writeUInt8(blobType)
-            if blobType in [0x14, 0x54]:
+            if blobType in [0x14, 0x54, 0x5d]:
                 blobAddr    = blobData[0]
                 blobLen     = blobData[1]
                 endAddress  = blobAddr + blobLen
@@ -94,6 +94,9 @@ class BasicContainerParser(ContainerParser):
                 elif 0x54 == blobType:
                     outputStream.write(self.createDataBlobType54(
                         cipher, blobAddr, blobData[3], blobData[4], blobData[5], blobData[6]).getRawData())
+                elif 0x5d == blobType:
+                    outputStream.write(self.createDataBlobType5d(
+                        cipher, blobAddr, blobData[3], blobData[4], blobData[5], blobData[6], blobData[7], blobData[8]).getRawData())
                 else:
                     raise Exception("Don't know how to produce data blob to type %x" % blobType)
             else:
@@ -149,10 +152,35 @@ class BasicContainerParser(ContainerParser):
         dataCheck = self.generateDataCheck16Bit(data)
         result.writeUInt16(dataCheck)
         result.writeUInt8(someFlag)
-        if extraBytes not in ['', None]:
-            result.write(extraBytes)
+        result.write(extraBytes)
         result.writeUInt32(len(data))
         result.writeUInt32(address)
+        headerSum = self.generateBytesSum8Bit(result.getRawData())
+        result.writeUInt8(headerSum)
+        result.write(data)
+        result.seek(0)
+        return result
+
+    def createDataBlobType5d(self, data, address, subType, someFlags, sha1Digest, name, anotherSha1, extraBytes): 
+        data = self.validateCreateDataBlobInput(data)
+        result = self.ObjectWithStream()
+        result.writeUInt16(subType)
+        headerLength = 0x2d
+        if anotherSha1:
+            headerLength += 0x14
+        headerLength += len(extraBytes)
+        result.writeUInt8(headerLength)
+        result.write(sha1Digest)
+        result.write(name + ('\x00' * (0xc - len(name))))
+        for flag in someFlags:
+            result.writeUInt8(flag)
+        dataCheck = self.generateDataCheck16Bit(data)
+        result.writeUInt16(dataCheck)
+        result.writeUInt32(len(data))
+        result.writeUInt32(address)
+        if anotherSha1:
+            result.write(anotherSha1)
+        result.write(extraBytes)
         headerSum = self.generateBytesSum8Bit(result.getRawData())
         result.writeUInt8(headerSum)
         result.write(data)
