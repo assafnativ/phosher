@@ -76,6 +76,12 @@ class NokiaFile(ParserInterface):
             if (plainAddress != self.address):
                 raise Exception("This scenario is not supported at the moment")
 
+    def __repr__( self ):
+        result = ObjectWithStream()
+        result.write("NokiaFile of type 0x%x" % (self.fileType))
+        result.write('\t' + self.containerParser.getPrintableInfo(self.blobs).replace('\n', '\n\t'))
+        return result.getRawData()
+
     def encode( self ):
         if None == self.containerParser:
             return chr(self.fileType) + self.plain
