@@ -4,7 +4,10 @@ from glob import glob
 from fractions import gcd
 import math
 import gmpy2
+import time
 
+# Most of the function in this file are based on the FactHacks presentation from 29c3
+# https://www.youtube.com/watch?v=IuSnY_O8DqQ
 class rsaResearch(object):
     def checkSmallPrimes(self, keys, time_per_key=5):
         if not isinstance(keys, (tuple, list)):
@@ -13,7 +16,7 @@ class rsaResearch(object):
         a0 = 1
         for key in keys:
             start_time = time.time()
-            a1 = (a0**2  + c) % key
+            a1 = (a0**2 + c) % key
             a2 = (a1**2 + c) % key
             while (time.time() - start_time) < time_per_key:
                 if gcd(key, abs(a2-a1)) != 1:

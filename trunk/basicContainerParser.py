@@ -104,6 +104,17 @@ class BasicContainerParser(ContainerParser):
         outputStream.seek(0)
         return outputStream
 
+    def getPrintableInfo(self, blobs):
+        result = ObjectWithStream()
+        for i, (blobType, blobData) in enumerate(blobs):
+            if blobType in [0x14, 0x54, 0x5d]:
+                blobAddr    = blobData[0]
+                blobLen     = blobData[1]
+                result.write('Blob[%d] of type 0x%x length 0x%x at address 0x%x\n' % (i, blobType, blobLen, blobAddr))
+            else:
+                result.write('Blob[%d] of type 0x%x\n' % (i, blobType))
+        return result.getRawData()
+
     def validateCreateDataBlobInput(self, data):
         if isinstance(data, (ObjectWithStream, ObjectWithStreamBigEndian)):
             data = data.getRawData()
