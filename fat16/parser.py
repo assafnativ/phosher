@@ -417,8 +417,7 @@ class FAT16(ObjectWithStream):
         self.seek(0xf800)
         if '00000000FF00FFFFFFFFFFFFFFFFFFFF'.decode('hex') == self.peek(0x10):
             return PADDING_TYPE_NEW
-        self.paddingType = PADDING_TYPE_NO_PADDING
-        return
+        return PADDING_TYPE_NO_PADDING
 
     def __init__(self, data, isVerbose=False):
         self.isVerbose = isVerbose
@@ -988,11 +987,11 @@ class FAT16(ObjectWithStream):
         longName = ''
         result = []
         while True:
-            entryType = stream.read(13)
+            entryType = stream.read(15)
             if 0 == len(entryType):
                 break
-            stream.seek(-13, 1)
-            if '\x0f\x00' != entryType[-2:] and '\x00\x00' != entryType[-2:]: 
+            stream.seek(-15, 1)
+            if '\x0f\x00' != entryType[-4:-2] and '\x00\x00\x00\x00' != entryType[-4:]:
                 #self.printIfVerbos("File at 0x%x" % stream.tell())
                 if '' != longName:
                     endPos = longName.find('\xff\xff')
@@ -1000,9 +999,10 @@ class FAT16(ObjectWithStream):
                         longName = longName[:endPos]
                     longName = longName.replace('\x00\x00', '')
                 dirEntry = DirEntry(stream, longName)
-                if dirEntry.name[0] in ['\x00', '\xff', ' ']:
-                    self.printIfVerbos( "File %s is deleted" % dirEntry.name[1:] )
-                    pass
+                if dirEntry.name[0] in ['\x00', '\xff', '\xe5', ' ']:
+                    self.printIfVerbos( "File ?%s is deleted" % dirEntry.name[1:] )
+                    if '' != longName:
+                        self.printIfVerbos("It had long name of %s" % longName)
                 elif dirEntry.getName() == '.':
                     pass
                 elif dirEntry.getName() == '..':
@@ -1017,13 +1017,13 @@ class FAT16(ObjectWithStream):
                 #self.printIfVerbos(repr(dirEntry))
                 longName = ''
                 lastNameIndex = 0
-            elif '\x0f\x00' == entryType[-2:]:
+            elif '\x0f\x00' == entryType[-4:-2]:
                 # Long file name
                 lfn = LongFileNameEntry(stream)
                 index = lfn.partIndex - 0x40
                 if index > lastNameIndex:
                     if '' != longName:
-                        self.printIfVerbos("! Long name not used %s (%x, %x)" % (longName, index, lastNameIndex))
+                        self.printIfVerbos("! Long name not used %s (%x, %x) - Might be reminings of some deleted file" % (longName, index, lastNameIndex))
                     longName = ''
                 longName = lfn.name + longName
             else:

@@ -34,8 +34,8 @@ def patchMcusw(base, plain, nokiaFile, patches, isVerbose):
     plainLen = len(plain)
     endAddr = base + plainLen
     for patchName, patchAddr, oldValue, newValue in patches:
-        if (patchAddr < base) or (patchAddr >= endAddr):
-            raise Exception("Can't write patch %s - Invalid address 0x%x (Valid addresses are 0x%x to 0x%x)" % (patchName, patchAddr, base, endAddr))
+        if (patchAddr < base):
+            raise Exception("Can't write patch %s - Invalid address 0x%x (Valid addresses start at 0x%x)" % (patchName, patchAddr, base))
         if 0xa2 == nokiaFile.fileType and patchAddr > 0x1000100 and patchAddr < 0x1100100:
             print "Warnning patching bytes at the first MB on a DCT4 firmware"
         newValueBin = patchValueToBin(newValue)
@@ -89,7 +89,7 @@ def main():
     PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose)
     inputFile   = cmdLineInputFile(patchesDefines, inputFile, userOptions)
     outputFile  = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
-    nokiaFile = NokiaFile(inputFile, isVerbose=isVerbose)
+    nokiaFile = NokiaFile(inputFile)
     plain = nokiaFile.plain
     plainAddr = nokiaFile.address
 
