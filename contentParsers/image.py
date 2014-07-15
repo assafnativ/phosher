@@ -6,7 +6,7 @@ from optparse import OptionParser
 
 from phosher.nokiaFile import NokiaFile
 from phosher.fat16.parser import parseImage as parseFAT16
-from phosher.fat16.patcher import Fat16Patcher
+from phosher.fat16 import patcher
 from phosher.general.util import *
 
 def main():
@@ -29,7 +29,7 @@ def main():
     createIma   = options.createIma
     imageName   = options.imageName
     isVerbose   = options.isVerbose
-    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose)
+    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose, globs=patcher)
     inputFile = cmdLineInputFile(patchesDefines, inputFile, userOptions)
     outputFile = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
     if "DUMP_DEST" not in patchesDefines and None == dumpDest:
@@ -46,7 +46,7 @@ def main():
     fat16 = parseFAT16(imageData, isVerbose=isVerbose)
 
     if None != patchesFile:
-        fat16Patcher = Fat16Patcher(fat16)
+        fat16Patcher = patcher.Fat16Patcher(fat16)
         fat16Patcher.patch(PATCHES)
     if isDump:
         fat16.dumpTree(dumpDest)

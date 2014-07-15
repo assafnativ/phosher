@@ -155,12 +155,15 @@ def cmdLineDumpDestFile(allGlobals, dumpDest, outputFile, plainAddr):
         dumpDest = allGlobals['DUMP_DEST']
     return dumpDest
 
-def loadPatchesFromFile(patchesFile, userOptions, isVerbose):
+def loadPatchesFromFile(patchesFile, userOptions, isVerbose, globs=None):
     if None != patchesFile:
         if not os.path.isfile(patchesFile):
             userOptions.error("Patches file not found")
         printIfVerbose("Exexuting Python script: %s" % patchesFile, isVerbose)
-        patchesDefines = {}
+        if None == globs:
+            patchesDefines = {}
+        else:
+            patchesDefines = globs.__dict__.copy()
         execfile(patchesFile, patchesDefines)
         if 'PATCHES' not in patchesDefines:
             raise Exception("Patches file did not define PATCHES")
@@ -169,3 +172,4 @@ def loadPatchesFromFile(patchesFile, userOptions, isVerbose):
         patchesDefines = {}
         PATCHES = None
     return PATCHES, patchesDefines
+

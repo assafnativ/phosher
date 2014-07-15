@@ -73,7 +73,7 @@ class Fat16Patcher(object):
                         patch.display(old_data, new_data)
                 elif isinstance(patch, FAT_NEW_FILE):
                     data = file(patch.src_file, 'rb').read()
-                    dir_path, fname = splitDirNameFname(path)
+                    dir_path, fname = self.splitDirNameFname(path)
                     if dir_path not in ['/', '\\', '']:
                         containingFolder = fat16.getFileObj(dir_path)
                         if None == containingFolder:
@@ -101,7 +101,7 @@ class Fat16Patcher(object):
                             updateDate=updateDate )
                     fat16.writeFile(path, data)
                 elif isinstance(patch, FAT_NEW_DIR):
-                    dir_path, fname = splitDirNameFname(path)
+                    dir_path, fname = self.splitDirNameFname(path)
                     if dir_path not in ['\\', '/', '']:
                         containingFolder = fat16.getFileObj(dir_path)
                         if None == containingFolder:
@@ -145,7 +145,7 @@ class Fat16Patcher(object):
                     print "Patching %s -> %s" % (patch.old_value.encode('hex'), patch.new_value.encode('hex'))
                     fat16.writeFile(path, new_data)
                 elif isinstance(patch, FAT_FIX_JAD):
-                    dir_path, fname = splitDirNameFname(path)
+                    dir_path, fname = self.splitDirNameFname(path)
                     if fname[-4:] not in ['.jar', '.jad']:
                         raise Exception("Need a jar file name")
                     jadName = path[:-4] + '.jad'

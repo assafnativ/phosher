@@ -12,7 +12,7 @@ from phosher.general.objectWithStream import *
 
 class PPMSection(object):
     def __init__(self):
-        pass
+        self.isVerbose = False
     def calcCheckSum(self, block):
         return sum(unpack('<' + ('L' * (len(block) / 4)), block)) & 0xffffffff
     def parseFromStream(self, stream):
@@ -23,10 +23,10 @@ class PPMSection(object):
         self.version = chunk.read(8)
         if 'DUMFILE\x00' == self.version or 'LDB\x00' == self.name:
             return
-        printIfVerbose("Section %s at %x of %x bytes" % (self.name.replace('\x00', ' '), self.startPos, self.length))
+        printIfVerbose("Section %s at %x of %x bytes" % (self.name.replace('\x00', ' '), self.startPos, self.length), self.isVerbose)
         self.calcedChecksum = self.calcCheckSum(chunk.getRawData())
         if self.checksum != self.calcedChecksum:
-            printIfVerbose("Checksum mismatch: %x <-> %x" % (self.checksum, self.calcedChecksum))
+            printIfVerbose("Checksum mismatch: %x <-> %x" % (self.checksum, self.calcedChecksum), self.isVerbose)
         self.subSections = []
         while chunk.tell() < (self.length - 4):
             subSection = PPMSubSection()
@@ -38,9 +38,9 @@ class PPMSection(object):
             return self.rawData
         result = ObjectWithStream()
         # Save place for checksum
-        result.writeDword(0)
+        result.writeUInt32(0)
         # Save place for length
-        result.writeDword(0)
+        result.writeUInt32(0)
         result.write(self.name[::-1])
         result.write(self.version)
         for subSection in self.subSections:
@@ -50,11 +50,11 @@ class PPMSection(object):
         if self.length != length:
             print("! Section %s has changed its length (%x -> %x)" % (self.name, self.length, length))
         self.length = length
-        result.writeDword(self.length)
+        result.writeUInt32(self.length)
         result.seek(4,0)
         rawData = result.readToEnd()
         result.seek(0, 0)
-        result.writeDword(self.calcCheckSum(rawData))
+        result.writeUInt32(self.calcCheckSum(rawData))
         return result.getRawData()
 
 class PPMSubSection(object):
@@ -90,19 +90,19 @@ class PPMSubSection(object):
     def parseFromStream(self, stream, parent):
         self.parent = parent
         self.startPos = stream.tell()
-        self.sectionId = stream.readDword()
+        self.sectionId = stream.readUInt32()
         if 0 == self.sectionId:
             self.raw = stream.readToEnd()
             return
         self.length, subSection = readLTVChunk(stream, prefetchedBytes=4)
         self.name = subSection.read(4)
         self.flags = []
-        self.flags.append(subSection.readByte())
-        self.flags.append(subSection.readByte())
-        self.flags.append(subSection.readByte())
-        self.flags.append(subSection.readByte())
+        self.flags.append(subSection.readUInt8())
+        self.flags.append(subSection.readUInt8())
+        self.flags.append(subSection.readUInt8())
+        self.flags.append(subSection.readUInt8())
         self.stream = subSection
-        #printIfVerbose("\tSub (%x) section %s at %x of %s bytes" % (self.sectionId, self.name, self.startPos, self.length))
+        #printIfVerbose("\tSub (%x) section %s at %x of %s bytes" % (self.sectionId, self.name, self.startPos, self.length), self.isVerbose)
         sectionType = self.parent.name
         if sectionType in self.SECTIONS_PARSERS:
             self.SECTIONS_PARSERS[sectionType]()
@@ -111,25 +111,25 @@ class PPMSubSection(object):
 
     def toBinary(self):
         result = ObjectWithStream()
-        result.writeDword(self.sectionId)
+        result.writeUInt32(self.sectionId)
         if 0 == self.sectionId:
             result.write(self.raw)
             return result.getRawData()
         # Save place for the length
-        result.writeDword(0)
+        result.writeUInt32(0)
         result.write(self.name)
         for flag in self.flags:
-            result.writeByte(flag)
+            result.writeUInt8(flag)
         sectionType = self.parent.name
         if sectionType in self.SECTIONS_BUILDER:
             result.write(self.SECTIONS_BUILDER[sectionType]())
         else:
             raise Exception("Don't know how to build section of type %s" % sectionType)
         if result.tell() != self.length:
-            printIfVerbose("! Section %s of type %s has changed its length (%x -> %x)" % (self.name, sectionType, self.length, result.tell()))
+            printIfVerbose("! Section %s of type %s has changed its length (%x -> %x)" % (self.name, sectionType, self.length, result.tell()), self.isVerbose)
         self.length = result.tell()
         result.seek(4, 0)
-        result.writeDword(self.length)
+        result.writeUInt32(self.length)
         return result.getRawData()
 
     def parseAnim(self):
@@ -138,13 +138,13 @@ class PPMSubSection(object):
         if 0 == self.sectionId:
             self.raw = stream.readToEnd()
             return
-        self.numEntries = stream.readDword()
+        self.numEntries = stream.readUInt32()
         animationsInfo = []
         for i in range(self.numEntries):
-            animationIndex  = stream.readWord()
-            animationUnk    = stream.readWord()
-            animationOffset = stream.readDword()
-            animationUnk2   = stream.readDword()
+            animationIndex  = stream.reaUInt32()
+            animationUnk    = stream.reaUInt32()
+            animationOffset = stream.readUInt32()
+            animationUnk2   = stream.readUInt32()
             animationsInfo.append((
                     animationIndex,
                     animationUnk,
@@ -167,20 +167,20 @@ class PPMSubSection(object):
         if 0 == self.sectionId:
             return self.raw
         result = ObjectWithStream()
-        result.writeDword(len(self.animations))
+        result.writeUInt32(len(self.animations))
         totalLength = 0
         for index, unk, unk2, data in self.animations:
-            result.writeWord(index)
-            result.writeWord(unk)
-            result.writeDword(totalLength)
-            result.writeDword(unk2)
+            result.writeUInt16(index)
+            result.writeUInt16(unk)
+            result.writeUInt32(totalLength)
+            result.writeUInt32(unk2)
             totalLength += len(data)
         for index, unk, unk2, data in self.animations:
             result.write(data)
         return result.getRawData()
 
     def parseText(self):
-        #printIfVerbose("\t\tParsing TEXT section subSection %s" % self.name)
+        #printIfVerbose("\t\tParsing TEXT section subSection %s" % self.name, self.isVerbose)
         result = []
         stream = self.stream
         flags = self.flags
@@ -203,13 +203,13 @@ class PPMSubSection(object):
 
     def parseTextNotCompressed(self):
         stream = self.stream
-        numItems = stream.readWord()
+        numItems = stream.readUInt16()
         lengths = []
         for i in range(numItems):
             if self.isTwoBytesLen:
-                entryLength = stream.readWord()
+                entryLength = stream.readUInt16()
             else:
-                entryLength = stream.readByte()
+                entryLength = stream.readUInt8()
             if 0xfeff <= entryLength:
                 raise Exception("Length error")
             if self.isUTF16:
@@ -219,10 +219,10 @@ class PPMSubSection(object):
         for i, length in enumerate(lengths):
             newString = stream.read(length)
             if self.isUTF16:
-                #printIfVerbose('\t\t\t%x %s' % (stream.tell(), newString.decode('UTF16')))
+                #printIfVerbose('\t\t\t%x %s' % (stream.tell(), newString.decode('UTF16')), self.isVerbose)
                 pass
             else:
-                #printIfVerbose('\t\t\t%x %s' % (stream.tell(), newString))
+                #printIfVerbose('\t\t\t%x %s' % (stream.tell(), newString), self.isVerbose)
                 pass
             texts.append(newString)
         sectionLen = self.length
@@ -235,15 +235,15 @@ class PPMSubSection(object):
     
     def buildTextNotCompressed(self):
         result = ObjectWithStream()
-        result.writeWord(len(self.texts))
+        result.writeUInt16(len(self.texts))
         for text in self.texts:
             textLen = len(text)
             if self.isUTF16:
                 textLen /= 2
             if self.isTwoBytesLen:
-                result.writeWord(textLen)
+                result.writeUInt16(textLen)
             else:
-                result.writeByte(textLen)
+                result.writeUInt8(textLen)
         for text in self.texts:
             result.write(text)
         return result.getRawData()
@@ -303,21 +303,22 @@ class PPMSubSection(object):
         return(self.raw)
 
 def readLTVChunk(stream, prefetchedBytes=0):
-    length  = stream.readDword()
+    length  = stream.readUInt32()
     subSection = ObjectWithStream()
     subSectionData = stream.read(length - 4 - prefetchedBytes)
-    subSection.writeDword(length)
+    subSection.writeUInt32(length)
     subSection.writeData(subSectionData)
     subSection.seek(4, 0)
     return (length, subSection)
 
 def readCLTVChunk(stream):
-    checksum = stream.readDword()
+    checksum = stream.readUInt32()
     length, subSection = readLTVChunk(stream, prefetchedBytes=4)
     return (checksum, length, subSection)
 
 class PPM(object):
-    def __init__(self, ppmData):
+    def __init__(self, ppmData, isVerbose=False):
+        self.isVerbose = isVerbose
         self.ppmData = ppmData
         self.parsePPMData(self.ppmData)
 
@@ -350,10 +351,10 @@ class PPM(object):
         if '\x00MPP' != self.data.read(4):
             raise Exception("Invalid magic in PPM header")
         self.version = self.data.readString()
-        printIfVerbose("PPM version: %s" % self.version)
+        printIfVerbose("PPM version: %s" % self.version, self.isVerbose)
         self.data.seek(0x40, 0)
         self.langId = self.data.read(4)
-        printIfVerbose("PPM lang ID: %s" % self.langId.replace('\x00', ''))
+        printIfVerbose("PPM lang ID: %s" % self.langId.replace('\x00', ''), self.isVerbose)
         self.sections = []
         while True:
             newSection = PPMSection()
@@ -404,7 +405,7 @@ def main():
     nokiaFile = NokiaFile(inputFile, isVerbose=isVerbose)
     ppmData = nokiaFile.plain
 
-    ppm = PPM(ppmData)
+    ppm = PPM(ppmData, isVerbose=isVerbose)
     if None != patchesFile:
         ppm.patch(PATCHES)
     if None != isDumpAnimations:
