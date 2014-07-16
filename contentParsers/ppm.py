@@ -11,8 +11,8 @@ from phosher.general.util import *
 from phosher.general.objectWithStream import *
 
 class PPMSection(object):
-    def __init__(self):
-        self.isVerbose = False
+    def __init__(self, isVerbose=False):
+        self.isVerbose = isVerbose
     def calcCheckSum(self, block):
         return sum(unpack('<' + ('L' * (len(block) / 4)), block)) & 0xffffffff
     def parseFromStream(self, stream):
@@ -52,19 +52,22 @@ class PPMSection(object):
         self.length = length
         result.writeUInt32(self.length)
         result.seek(4,0)
-        rawData = result.readToEnd()
+        rawData = result.read()
         result.seek(0, 0)
         result.writeUInt32(self.calcCheckSum(rawData))
         return result.getRawData()
 
 class PPMSubSection(object):
-    def __init__(self):
+    def __init__(self, isVerbose=False):
+        self.isVerbose = isVerbose
         self.SECTIONS_PARSERS = {
                 'TEXT':     self.parseText,
                 'EDIT' :    self.parseEdit,
                 'AORD' :    self.parseAord,
                 'LDB\x00' : self.parseLdb,
+                'CDB\x00' : self.parseCdb,
                 'ANIM' :    self.parseAnim,
+                'SIND' :    self.parseSind,
                 'TONE' :    self.parseTone,
                 'VFNT' :    self.parseVfnt,
                 'PLMN' :    self.parsePlmn,
@@ -78,7 +81,9 @@ class PPMSubSection(object):
                 'EDIT' :    self.buildEdit,
                 'AORD' :    self.buildAord,
                 'LDB\x00' : self.buildLdb,
+                'CDB\x00' : self.buildCdb,
                 'ANIM' :    self.buildAnim,
+                'SIND' :    self.buildSind,
                 'TONE' :    self.buildTone,
                 'VFNT' :    self.buildVfnt,
                 'PLMN' :    self.buildPlmn,
@@ -92,7 +97,7 @@ class PPMSubSection(object):
         self.startPos = stream.tell()
         self.sectionId = stream.readUInt32()
         if 0 == self.sectionId:
-            self.raw = stream.readToEnd()
+            self.raw = stream.read()
             return
         self.length, subSection = readLTVChunk(stream, prefetchedBytes=4)
         self.name = subSection.read(4)
@@ -136,13 +141,13 @@ class PPMSubSection(object):
         result = []
         stream = self.stream
         if 0 == self.sectionId:
-            self.raw = stream.readToEnd()
+            self.raw = stream.read()
             return
         self.numEntries = stream.readUInt32()
         animationsInfo = []
         for i in range(self.numEntries):
-            animationIndex  = stream.reaUInt32()
-            animationUnk    = stream.reaUInt32()
+            animationIndex  = stream.readUInt16()
+            animationUnk    = stream.readUInt16()
             animationOffset = stream.readUInt32()
             animationUnk2   = stream.readUInt32()
             animationsInfo.append((
@@ -151,17 +156,18 @@ class PPMSubSection(object):
                     animationOffset,
                     animationUnk2))
         self.animations = []
-        lastIndex, lastUnk, startOffset, lastUnk2 = animationsInfo[0]
-        for index, unk, endOffset, unk2 in animationsInfo[1:]:
-            data = stream.read(endOffset - startOffset)
-            self.animations.append((lastIndex, lastUnk, lastUnk2, data))
-            startOffset = endOffset
-            lastIndex = index
-            lastUnk = unk
-            lastUnk2 = unk2
-        # Add last one
-        data = stream.readToEnd()
-        self.animations.append((index, unk, unk2, data))
+        if 0 < self.numEntries:
+            lastIndex, lastUnk, startOffset, lastUnk2 = animationsInfo[0]
+            for index, unk, endOffset, unk2 in animationsInfo[1:]:
+                data = stream.read(endOffset - startOffset)
+                self.animations.append((lastIndex, lastUnk, lastUnk2, data))
+                startOffset = endOffset
+                lastIndex = index
+                lastUnk = unk
+                lastUnk2 = unk2
+            # Add last one
+            data = stream.read()
+            self.animations.append((index, unk, unk2, data))
 
     def buildAnim(self):
         if 0 == self.sectionId:
@@ -180,12 +186,16 @@ class PPMSubSection(object):
         return result.getRawData()
 
     def parseText(self):
+        self.raw = self.stream.read()
+        return
+
+        # Canceld for now - Use trix
         #printIfVerbose("\t\tParsing TEXT section subSection %s" % self.name, self.isVerbose)
         result = []
         stream = self.stream
         flags = self.flags
         if 0 == self.sectionId:
-            self.raw = stream.readToEnd()
+            self.raw = stream.read()
             return
         if flags[0] & 0x10:
             self.compression = 1
@@ -249,6 +259,9 @@ class PPMSubSection(object):
         return result.getRawData()
 
     def buildText(self):
+        return(self.raw)
+
+        # Canceld for now - Use Trix
         if 0 == self.sectionId:
             return self.raw
         if 0 == self.compression:
@@ -257,33 +270,41 @@ class PPMSubSection(object):
             return self.raw
 
     def parseEdit(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parseAord(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parseLdb(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
+    def parseCdb(self):
+        self.raw = self.stream.read()
+    def parseSind(self):
+        self.raw = self.stream.read()
     def parseTone(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parseVfnt(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parsePlmn(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parseLpcs(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parseGsmc(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parsePale(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parseSchm(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
     def parseThem(self):
-        self.raw = self.stream.readToEnd()
+        self.raw = self.stream.read()
 
     def buildEdit(self):
         return(self.raw)
     def buildAord(self):
         return(self.raw)
     def buildLdb(self):
+        return(self.raw)
+    def buildCdb(self):
+        return(self.raw)
+    def buildSind(self):
         return(self.raw)
     def buildTone(self):
         return(self.raw)
@@ -330,6 +351,8 @@ class PPM(object):
         for section in self.sections:
             if 'ANIM' == section.name:
                 for subSection in section.subSections:
+                    if 0 == subSection.sectionId:
+                        continue
                     for index, _, _, data in subSection.animations:
                         exten = 'bin'
                         if data.startswith('GIF'):
@@ -357,7 +380,7 @@ class PPM(object):
         printIfVerbose("PPM lang ID: %s" % self.langId.replace('\x00', ''), self.isVerbose)
         self.sections = []
         while True:
-            newSection = PPMSection()
+            newSection = PPMSection(isVerbose=self.isVerbose)
             newSection.parseFromStream(self.data)
             self.sections.append(newSection)
             if newSection.version == 'DUMFILE\x00':
