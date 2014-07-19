@@ -89,7 +89,7 @@ def main():
     PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose)
     inputFile   = cmdLineInputFile(patchesDefines, inputFile, userOptions)
     outputFile  = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
-    nokiaFile = NokiaFile(inputFile)
+    nokiaFile = NokiaFile(inputFile, isVerbose=isVerbose)
     plain = nokiaFile.plain
     plainAddr = nokiaFile.address
 
