@@ -379,9 +379,10 @@ class FAT16(ObjectWithStream):
         stream2 = ObjectWithStream()
         self.seek(0, 0)
         dataLength = len(self)
+        paddingChunkSize = (self.numPeddingLines + 4) * 0x10
         while self.tell() < dataLength:
             stream1.write(self.read(0xf800))
-            stream2.write(self.read(0x200))
+            stream2.write(self.read(paddingChunkSize))
         stream1.seek(0,0)
         stream2.seek(0,0)
         return (stream1, stream2)
@@ -390,17 +391,18 @@ class FAT16(ObjectWithStream):
         output = ObjectWithStream()
         d = stream.read(0xf800)
         line = 0
+        lineLength = 0xf800 / self.numPeddingLines
         while d != '':
             chunk_length = len(d)
             if len(d) < 0xf800:
                 d += '\xff' * (0xf800 - len(d))
             output.write(d)
-            for i in range(chunk_length // 0x200):
+            for i in range(chunk_length // lineLength):
                 output.write(pack('<L', line))
                 output.write('\xff\x00')
                 output.write('\xff' * 10)
                 line += 1
-            for i in range(0x7c - (chunk_length / 0x200)):
+            for i in range(self.numPeddingLines - (chunk_length // lineLength)):
                 output.write('\xff' * 32)
             output.write('\xff' * 32)
             output.write('\xff\xff\x00\xff')
@@ -413,10 +415,20 @@ class FAT16(ObjectWithStream):
 
     def guessPaddingType(self):
         if 'F0F00001FF000000FFF0FFFF00000000'.decode('hex') == self.peek(0x10):
+            self.printIfVerbos("Using new DCT4 padding")
             return PADDING_TYPE_DCT4
         self.seek(0xf800)
         if '00000000FF00FFFFFFFFFFFFFFFFFFFF'.decode('hex') == self.peek(0x10):
+            self.printIfVerbos("Using new type of padding")
+            numLines = 0
+            lineIndex = self.readUInt32()
+            while lineIndex == numLines:
+                numLines += 1
+                self.read(0xc)
+                lineIndex = self.readUInt32()
+            self.numPeddingLines = numLines
             return PADDING_TYPE_NEW
+        self.printIfVerbos("No padding")
         return PADDING_TYPE_NO_PADDING
 
     def __init__(self, data, isVerbose=False):
@@ -1111,29 +1123,31 @@ class FAT16(ObjectWithStream):
                 os.mkdir(outputPath + new_path)
                 self.dumpTree(outputPath, f.content, new_path)
             else:
-                file(outputPath + path + f.getName(), 'wb').write(f.rawData)
+                fname = outputPath + path + f.getName()
+                print fname
+                file(fname, 'wb').write(f.rawData)
 
     def printIfVerbos(self, text):
         if self.isVerbose:
             print text
 
     def parseHeaders(self):
-        self.jumpOpcode      = self.read(2)           #   0
-        self.nopOpcode       = self.read(1)           #   2
-        self.oemName         = self.read(8)           #   3
-        self.bytesPerSector  = self.readUInt16()         #  11
-        self.sectorsPerCluster = self.readUInt8()       #  13
-        self.reserverSectorsCount = self.readUInt16()    #  14
-        self.numOfTables     = self.readUInt8()         #  16
-        self.maxRootEntries  = self.readUInt16()         #  17
-        self.totalSectors    = self.readUInt16()         #  19
-        self.mediaDescriptor = self.readUInt8()         #  21
-        self.sectorsPerFAT   = self.readUInt16()         #  22
-        self.sectorsPerTrack = self.readUInt16()         #  24
-        self.numOfHeads      = self.readUInt16()         #  26
-        self.hiddenSectors   = self.readUInt32()        #  28
+        self.jumpOpcode      = self.read(2)            #   0
+        self.nopOpcode       = self.read(1)            #   2
+        self.oemName         = self.read(8)            #   3
+        self.bytesPerSector  = self.readUInt16()       #  11
+        self.sectorsPerCluster = self.readUInt8()      #  13
+        self.reserverSectorsCount = self.readUInt16()  #  14
+        self.numOfTables     = self.readUInt8()        #  16
+        self.maxRootEntries  = self.readUInt16()       #  17
+        self.totalSectors    = self.readUInt16()       #  19
+        self.mediaDescriptor = self.readUInt8()        #  21
+        self.sectorsPerFAT   = self.readUInt16()       #  22
+        self.sectorsPerTrack = self.readUInt16()       #  24
+        self.numOfHeads      = self.readUInt16()       #  26
+        self.hiddenSectors   = self.readUInt32()       #  28
         if 0 == self.totalSectors:
-            self.totalSectors    = self.readUInt32()        #  32
+            self.totalSectors    = self.readUInt32()   #  32
         else:
             self.extendedTotalSecotrs = self.readUInt32()
         if self.isVerbose:
