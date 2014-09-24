@@ -50,10 +50,10 @@ def main():
         fat16Patcher.patch(PATCHES)
     if isDump:
         fat16.dumpTree(dumpDest)
-    imageData = fat16.make()
     if createIma:
+        imageData = fat16.makeNoPadding()
         file(imageName, 'wb').write(imageData)
-    nokiaFile.plain = imageData
+    nokiaFile.plain = fat16.make()
     file(outputFile, 'wb').write(nokiaFile.encode())
 
 if __name__ == "__main__":

@@ -848,7 +848,7 @@ class FAT16(ObjectWithStream):
         data = self.rootDir.toRaw()
         self._writeRoot(data)
 
-    def make(self):
+    def makeNoPadding(self):
         output = ObjectWithStream()
         header = ''
         header += self.jumpOpcode
@@ -899,10 +899,15 @@ class FAT16(ObjectWithStream):
         output.write(self.read())
 
         output.seek(0, 0)
+        return output.read()
+
+    def make(self):
+        output = ObjectWithStream(self.makeNoPadding())
         if self.paddingType == PADDING_TYPE_DCT4:
             output = self.addDCT4Padding(output)
         if self.paddingType == PADDING_TYPE_NEW:
             output = self.addNewPadding(output)
+        output.seek(0, 0)
         return output.read()
 
     def readPadding(self, paddingLength):
