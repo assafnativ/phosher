@@ -8,7 +8,8 @@ import os
 
 PADDING_TYPE_NO_PADDING = 0
 PADDING_TYPE_DCT4 = 1
-PADDING_TYPE_NEW  = 2
+PADDING_TYPE_BB5  = 2
+PADDING_TYPE_NEW  = 3
 
 def attributesToStr(x):
     result = ''
@@ -374,6 +375,99 @@ class FAT16(ObjectWithStream):
         output.seek(0, 0)
         return output
 
+    def removeBB5Padding(self):
+        output = ObjectWithStream()
+        jumps = {}
+        self.seek(0, 0)
+        dataLength = len(self)
+        counter = 0
+        isLastBlock = False
+        while self.tell() != dataLength:
+            masterHeader = self.read(4)
+            if '\xf0\xf0\x01\x00' != masterHeader:
+                raise Exception("Master header error at %x" % self.tell())
+            blockType = self.readUInt8()
+            if 0 == blockType:
+                if isLastBlock:
+                    raise Exception("More than one last block")
+            elif 0xc0 == blockType:
+                isLastBlock = True
+            else:
+                raise Exception("Unknown block type at %x" % self.tell())
+            if '\xff\x00\x00' != self.read(3):
+                raise Exception("Master header error2 at %x" % self.tell())
+            for i in range(0x7e):
+                header = self.read(4)
+                if '\xff\xff\xff\xff' == header:
+                    self.printIfVerbos("Data end at %x" % self.tell())
+                    tail = self.read(dataLength - self.tell() - 0x4)
+                    if len(tail) != tail.count('\xff'):
+                        raise Exception("Tail error")
+                    self.printIfVerbos("%x bytes in tail (%x)" % (len(tail), i))
+                    break
+                elif '\xf0\xff\xff\xff' != header:
+                    raise Exception("Header error at %x" % self.tell())
+                index = self.readUInt32()
+                if counter != index:
+                    if index <= counter:
+                        raise Exception("Jump back in padding at %x" % self.tell())
+                    jumps[counter] = index
+                    self.printIfVerbos("Data jump from %x to %x" % (counter, index))
+                    output.write('\xff' * (0x200 * (index - counter)))
+                    counter = index
+                output.write(self.read(0x200))
+                counter += 1
+            if not isLastBlock:
+                if '\xff\xff\xff\xff' != self.read(4):
+                    raise Exception("Master footer error 1 at %x" % self.tell())
+            if '\xff\xff\xf0\xf0' != self.read(4):
+                raise Exception("Master footer error 2 at %x" % self.tell())
+        output.seek(0, 0)
+        return output, jumps
+
+    def addBB5Padding(self, stream, jumps=None):
+        if None == jumps:
+            jumps = {}
+        output = ObjectWithStream()
+        stream.seek(0, 0)
+        dataLength = len(stream)
+        SUB_BLOCKS_IN_BLOCK = 0x7e
+        dataBytesInBlock = SUB_BLOCKS_IN_BLOCK * 0x200
+        counter = 0
+        while stream.tell() < dataLength:
+            output.write('\xf0\xf0\x01\x00')
+            bytesLeft = (dataLength - stream.tell())
+            if bytesLeft > dataBytesInBlock:
+                output.writeUInt8(0)
+            else:
+                output.writeUInt8(0xc0)
+            output.write('\xff\x00\x00')
+            for i in range(SUB_BLOCKS_IN_BLOCK):
+                if dataLength > stream.tell():
+                    output.write('\xf0\xff\xff\xff')
+                    output.writeUInt32(counter)
+                    data = stream.read(0x200)
+                    if len(data) < 0x200:
+                        data = data + ('\xff' * (0x200 - len(data)))
+                    output.write(data)
+                else:
+                    output.write('\xff\xff\xff\xff')
+                    output.write('\xff\xff\xff\xff')
+                    output.write('\xff' * 0x200)
+                counter += 1
+                if counter in jumps:
+                    target = jumps[counter]
+                    if target <= counter:
+                        raise Exception("Invalid jump %x -> %x" % (counter, target))
+                    temp = stream.read(0x200 * (target - counter))
+                    if len(temp) != temp.count('\xff'):
+                        raise Exception("Jump over real data %x -> %x" % (counter, target))
+                    counter = target
+            output.write('\xff\xff\xff\xff')
+            output.write('\xff\xff\xf0\xf0')
+        output.seek(0, 0)
+        return output
+
     def removeNewPadding(self):
         stream1 = ObjectWithStream()
         stream2 = ObjectWithStream()
@@ -417,6 +511,9 @@ class FAT16(ObjectWithStream):
         if 'F0F00001FF000000FFF0FFFF00000000'.decode('hex') == self.peek(0x10):
             self.printIfVerbos("Using new DCT4 padding")
             return PADDING_TYPE_DCT4
+        if 'F0F0010000FF0000'.decode('hex') == self.peek(0x8):
+            self.printIfVerbos("Using BB5 padding")
+            return PADDING_TYPE_BB5
         self.seek(0xf800)
         if '00000000FF00FFFFFFFFFFFFFFFFFFFF'.decode('hex') == self.peek(0x10):
             self.printIfVerbos("Using new type of padding")
@@ -444,6 +541,9 @@ class FAT16(ObjectWithStream):
         if self.paddingType == PADDING_TYPE_NEW:
             self.stream1, self.stream2 = self.removeNewPadding()
             self.stream = self.stream1
+            self.seek(0, 0)
+        elif self.paddingType == PADDING_TYPE_BB5:
+            self.stream, self.jumps = self.removeBB5Padding()
             self.seek(0, 0)
         elif self.paddingType == PADDING_TYPE_DCT4:
             self.stream1, self.stream2 = self.removeDCT4Padding()
@@ -872,7 +972,7 @@ class FAT16(ObjectWithStream):
         if totalSectors >= 0x10000:
             header += self.makeUInt32(totalSectors)
         else:
-            header += self.makeUInt32(totalSectors + self.hiddenSectors)
+            header += self.makeUInt32(self.hiddenSectors)
         # Extended BIOS parameter block
         header += self.makeUInt8(self.physicalDriveNum)
         header += self.makeUInt8(self.reserved)
@@ -905,7 +1005,9 @@ class FAT16(ObjectWithStream):
         output = ObjectWithStream(self.makeNoPadding())
         if self.paddingType == PADDING_TYPE_DCT4:
             output = self.addDCT4Padding(output)
-        if self.paddingType == PADDING_TYPE_NEW:
+        elif self.paddingType == PADDING_TYPE_BB5:
+            output = self.addBB5Padding(output, self.jumps)
+        elif self.paddingType == PADDING_TYPE_NEW:
             output = self.addNewPadding(output)
         output.seek(0, 0)
         return output.read()
@@ -1097,17 +1199,19 @@ class FAT16(ObjectWithStream):
             #print "Path not found"
             return None
 
-    def printTree(self, start=None, path=None):
+    def displayTree(self, start=None, path=None):
+        output = ''
         if None == start:
-            start = self.rootDir
+            start = self.rootDir.content
         if None == path:
             path = '/'
         for f in start:
             if f.getName() in ['.', '..']:
                 continue
-            print path + f.getName()
+            output += path + f.getName() + '\n'
             if f.isDir():
-                self.printTree(f.content, path + f.getName() + '/')
+                output += self.printTree(f.content, path + f.getName() + '/')
+        return output
 
     def dumpTree(self, outputPath, start=None, path=None):
         if outputPath[-1] not in ['/', '\\']:
