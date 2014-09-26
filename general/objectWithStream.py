@@ -3,12 +3,15 @@ import cStringIO
 from struct import pack, unpack
 
 class ObjectWithStream(object):
-    def __init__(self, data=None):
-        if None != data:
+    def __init__(self, data=None, endianity='<'):
+        self.endianity = endianity
+        if None == data:
+            self.stream = cStringIO.StringIO()
+        elif isinstance(data, str):
             self.stream = cStringIO.StringIO(data)
             self.stream.seek(0)
         else:
-            self.stream = cStringIO.StringIO()
+            self.stream = data
         self.offsetsHistory = []
     def read(self, length=None):
         if None == length:
@@ -28,21 +31,21 @@ class ObjectWithStream(object):
     def tell(self):
         return self.stream.tell()
     def readUInt32(self):
-        return unpack('<L', self.stream.read(4))[0]
+        return unpack(self.endianity + 'L', self.stream.read(4))[0]
     def readUInt16(self):
-        return unpack('<H', self.stream.read(2))[0]
+        return unpack(self.endianity + 'H', self.stream.read(2))[0]
     def readUInt8(self):
         return ord(self.stream.read(1))
     def makeUInt32(self, x):
-        return pack('<L', x)
+        return pack(self.endianity + 'L', x)
     def makeUInt16(self, x):
-        return pack('<H', x)
+        return pack(self.endianity + 'H', x)
     def makeUInt8(self, x):
         return chr(x)
     def writeUInt32(self, x):
-        self.stream.write(pack('<L', x))
+        self.stream.write(pack(self.endianity + 'L', x))
     def writeUInt16(self, x):
-        self.stream.write(pack('<H', x))
+        self.stream.write(pack(self.endianity + 'H', x))
     def writeUInt8(self, x):
         self.stream.write(chr(x))
     def readMBInt(self):
@@ -70,12 +73,16 @@ class ObjectWithStream(object):
         result = ''
         if isUTF16:
             nextByte = self.stream.read(2)
+            if '>' == self.endianity:
+                nextByte = nextByte[::-1]
         else:
             nextByte = self.stream.read(1)
         while nextByte not in ['\x00', '\x00\x00']:
             result += nextByte
             if isUTF16:
                 nextByte = self.stream.read(2)
+                if '>' == self.endianity:
+                    nextByte = nextByte[::-1]
             else:
                 nextByte = self.stream.read(1)
         return result
@@ -106,29 +113,6 @@ class ObjectWithStream(object):
         return result
 
 class ObjectWithStreamBigEndian(ObjectWithStream):
-    def readUInt32(self):
-        return unpack('>L', self.stream.read(4))[0]
-    def readUInt16(self):
-        return unpack('>H', self.stream.read(2))[0]
-    def makeUInt32(self, x):
-        return pack('>L', x)
-    def makeUInt16(self, x):
-        return pack('>H', x)
-    def writeUInt32(self, x):
-        self.stream.write(pack('>L', x))
-    def writeUInt16(self, x):
-        self.stream.write(pack('>H', x))
-    def readString(self, isUTF16=False):
-        result = ''
-        if isUTF16:
-            nextByte = self.stream.read(2)[::-1]
-        else:
-            nextByte = self.stream.read(1)
-        while nextByte not in ['\x00', '\x00\x00']:
-            result += nextByte
-            if isUTF16:
-                nextByte = self.stream.read(2)[::-1]
-            else:
-                nextByte = self.stream.read(1)
-        return result
+    def __init__(self, data=None):
+        ObjectWithStream.__init__(self, data, endianity='>')
 

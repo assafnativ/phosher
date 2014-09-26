@@ -7,9 +7,8 @@ import copy
 import os
 
 PADDING_TYPE_NO_PADDING = 0
-PADDING_TYPE_DCT4 = 1
-PADDING_TYPE_BB5  = 2
-PADDING_TYPE_NEW  = 3
+PADDING_TYPE_OLD = 1
+PADDING_TYPE_NEW = 2
 
 def attributesToStr(x):
     result = ''
@@ -30,9 +29,9 @@ def attributesToStr(x):
     return result.strip()
 
 def parseFileTime(x, micro=0):
-    s = (x & 0x1f) * 2 + micro;    x >>= 5
-    m = (x & 0x3f);        x >>= 6
-    h = (x & 0x1f);        x >>= 5
+    s = (x & 0x1f) * 2 + micro; x >>= 5
+    m = (x & 0x3f);             x >>= 6
+    h = (x & 0x1f);             x >>= 5
     return (s, m, h)
 def parseFileDate(x):
     d = (x & 0x7f);        x >>= 7
@@ -60,20 +59,20 @@ def clusterType(x):
 
 class LongFileNameEntry(ObjectWithStream):
     def __init__(self, stream):
-        self.stream = stream
-        self.partIndex      = self.readUInt8()      #  0
+        ObjectWithStream.__init__(self, data=stream)
+        self.partIndex      = self.readUInt8()    #  0
         self.name           = self.read(0x0a)     #  1
-        self.attribs        = self.readUInt16()      # 11
-        self.checksum       = self.readUInt8()      # 13
+        self.attribs        = self.readUInt16()   # 11
+        self.checksum       = self.readUInt8()    # 13
         self.name          += self.read(0x0c)     # 14
-        self.zero           = self.readUInt16()      # 26
+        self.zero           = self.readUInt16()   # 26
         self.name          += self.read(4)        # 28
         # Total 32
 
 class DirEntry(ObjectWithStream):
     def __init__(self, stream, longName=None, parent=None):
         if hasattr(stream, 'read'):
-            self.stream = stream
+            ObjectWithStream.__init__(self, data=stream)
             self.longName = longName
             self.name           = self.read(8)        #  0
             self.ext            = self.read(3)        #  8
@@ -296,116 +295,45 @@ def parseImage(data, isVerbose=False):
     return FAT16(data, isVerbose=isVerbose)
 
 class FAT16(ObjectWithStream):
-    DCT4_NEW_CHUNK_HEADER    = 'f0f00001ff000000'.decode('hex')
-    DCT4_LAST_CHUNK_HEADER   = 'f0f00001ffc00000'.decode('hex')
-    DCT4_EMPTY_CHUNK_HEADER  = 'ffffffffffffffff'.decode('hex')
-    DCT4_CHUNK_FOOTER        = 'fffffffffffffffffffffffffffffffffffffffffffff0f0'.decode('hex')
-    DCT4_SECTOR_HEADER       = 'fff0ffff'.decode('hex')
-    #DCT4_SECTOR_LENGTH       = 0x200
-    DCT4_EMPTY_SECTOR        = '\xff' * 0x200
-    DCT4_EMPTY_SECTOR_HEADER = '\xff' * 0x4
-    DCT4_SECTORS_PER_CHUNK   = 0xfc
-
-    def removeDCT4Padding(self):
-        stream1 = ObjectWithStream()
-        stream2 = ObjectWithStream()
-        self.seek(0, 0)
-        dataLength = len(self)
-        sectorsCount = 0
-        while self.tell() < dataLength:
-            chunkHeader = self.read(8)
-            if self.DCT4_LAST_CHUNK_HEADER == chunkHeader:
-                isLastChunk = True
-                pass
-            elif self.DCT4_NEW_CHUNK_HEADER == chunkHeader:
-                isLastChunk = False
-                pass
-            elif isLastChunk and self.DCT4_EMPTY_CHUNK_HEADER != chunkHeader:
-                raise Exception("Invalid chunk in DCT4 Image")
-            for i in range(self.DCT4_SECTORS_PER_CHUNK):
-                if self.tell() >= dataLength:
-                    break
-                header = self.read(0x4)
-                if header.startswith(self.DCT4_SECTOR_HEADER):
-                    if header != self.DCT4_SECTOR_HEADER:
-                        raise Exception("Invalid DCT4 image padding")
-                    sectorId = unpack('>L', self.read(0x4))[0]
-                    if sectorId != sectorsCount:
-                        raise Exception("Out of sync - DCT4 image")
-                    sectorId += 1
-                    stream1.write(self.read(0x200))
-                    stream2.write(header)
-                elif header.startswith(self.DCT4_EMPTY_SECTOR_HEADER):
-                    emptySector = self.read(0x200)
-                    if (self.DCT4_EMPTY_SECTOR != emptySector) and (len(emptySector) == len(self.DCT4_EMPTY_SECTOR)):
-                        raise Exception("Invalid DCT4 image padding")
-                    stream2.write(header)
-                else:
-                    raise Exception("Invalid DCT4 image padding")
-                sectorsCount += 1
-            chunkFooter = self.read(0x18)
-            if not isLastChunk and self.DCT4_CHUNK_FOOTER != chunkFooter:
-                raise Exception("Wrong chunk footer")
-        stream1.seek(0, 0)
-        stream2.seek(0, 0)
-        return (stream1, stream2)
-
-    def addDCT4Padding(self, data):
-        output = ObjectWithStream()
-        dataLength = len(data)
-        sectorId = 0
-        while dataLength < data.tell():
-            if data.tell() >= (dataLength - self.DCT4_CHUNK_LENGTH):
-                output.write(self.DCT4_LAST_CHUNK_HEADER)
-            else:
-                output.write(self.DCT4_NEW_CHUNK_HEADER)
-            for i in range(0xfc):
-                if data.tell() < dataLength:
-                    output.write(self.DCT4_SECTOR_HEADER)
-                    output.write(pack('>L', sectorId))
-                    sectorId += 1
-                    sector = data.read(0x200)
-                    if len(sector) < 0x200:
-                        sector += '\xff' * (0x200 - len(sector))
-                    output.write(sector)
-                else:
-                    output.write(self.DCT4_EMPTY_SECTOR_HEADER)
-                    output.write(self.DCT4_EMPTY_SECTOR)
-            output.write(self.DCT4_CHUNK_FOOTER)
-        output.seek(0, 0)
-        return output
-
-    def removeBB5Padding(self):
+    def removeOldPadding(self):
         output = ObjectWithStream()
         jumps = {}
         self.seek(0, 0)
         dataLength = len(self)
         counter = 0
         isLastBlock = False
+        saveEndianity = self.endianity
+        self.endianity = self.paddingEndianity
         while self.tell() != dataLength:
-            masterHeader = self.read(4)
-            if '\xf0\xf0\x01\x00' != masterHeader:
-                raise Exception("Master header error at %x" % self.tell())
-            blockType = self.readUInt8()
-            if 0 == blockType:
-                if isLastBlock:
-                    raise Exception("More than one last block")
-            elif 0xc0 == blockType:
+            masterHeader = self.read(2)
+            if '\xf0\xf0' != masterHeader:
+                raise Exception("Master header error 1 at %x" % self.tell())
+            if 1 != self.readUInt16():
+                raise Exception("Master header error 2 at %x" % self.tell())
+            blockType = self.readUInt16()
+            if isLastBlock:
+                self.printIfVerbos("More than one last block %x" % self.tell())
+            if 0xff00 == blockType:
+                pass
+            elif 0xffc0 == blockType:
                 isLastBlock = True
             else:
                 raise Exception("Unknown block type at %x" % self.tell())
-            if '\xff\x00\x00' != self.read(3):
+            if '\x00\x00' != self.read(2):
                 raise Exception("Master header error2 at %x" % self.tell())
-            for i in range(0x7e):
-                header = self.read(4)
-                if '\xff\xff\xff\xff' == header:
+            for i in range(self.paddingSubBlocksInBlock):
+                headerType = self.readUInt16()
+                header = self.read(2)
+                if '\xff\xff' != header:
+                    raise Exception("Header error 1 at %x" % self.tell())
+                if 0xffff == headerType:
                     self.printIfVerbos("Data end at %x" % self.tell())
                     tail = self.read(dataLength - self.tell() - 0x4)
                     if len(tail) != tail.count('\xff'):
                         raise Exception("Tail error")
                     self.printIfVerbos("%x bytes in tail (%x)" % (len(tail), i))
                     break
-                elif '\xf0\xff\xff\xff' != header:
+                elif 0xfff0 != headerType:
                     raise Exception("Header error at %x" % self.tell())
                 index = self.readUInt32()
                 if counter != index:
@@ -417,34 +345,43 @@ class FAT16(ObjectWithStream):
                     counter = index
                 output.write(self.read(0x200))
                 counter += 1
-            if not isLastBlock:
-                if '\xff\xff\xff\xff' != self.read(4):
-                    raise Exception("Master footer error 1 at %x" % self.tell())
-            if '\xff\xff\xf0\xf0' != self.read(4):
-                raise Exception("Master footer error 2 at %x" % self.tell())
+            # Read to 0x1000 alignment
+            bytesLeft = abs(self.tell() % -0x1000)
+            if bytesLeft < 4:
+                raise Exception("Not enought bytes left")
+            footer = self.read(bytesLeft)
+            if '\xf0\xf0' != footer[-2:]:
+                raise Exception("Footer error 1")
+            if len(footer) - 2 != footer.count('\xff'):
+                raise Exception("Footer error 2 (%x, %x, %x)" % (self.tell(), len(footer), footer.count('\xff')))
+        self.endianity = saveEndianity
         output.seek(0, 0)
         return output, jumps
 
-    def addBB5Padding(self, stream, jumps=None):
+    def addOldPadding(self, stream, jumps=None):
         if None == jumps:
             jumps = {}
+        saveEndianity = self.endianity
+        self.endianity = self.paddingEndianity
         output = ObjectWithStream()
         stream.seek(0, 0)
         dataLength = len(stream)
-        SUB_BLOCKS_IN_BLOCK = 0x7e
-        dataBytesInBlock = SUB_BLOCKS_IN_BLOCK * 0x200
+        self.paddingSubBlocksInBlock
+        dataBytesInBlock = self.paddingSubBlocksInBlock * 0x200
         counter = 0
         while stream.tell() < dataLength:
-            output.write('\xf0\xf0\x01\x00')
+            output.write('\xf0\xf0')
+            output.writeUInt16(1)
             bytesLeft = (dataLength - stream.tell())
             if bytesLeft > dataBytesInBlock:
-                output.writeUInt8(0)
+                output.writeUInt16(0xff00)
             else:
-                output.writeUInt8(0xc0)
-            output.write('\xff\x00\x00')
-            for i in range(SUB_BLOCKS_IN_BLOCK):
+                output.writeUInt16(0xffc0)
+            output.writeUInt16(0)
+            for i in range(self.paddingSubBlocksInBlock):
                 if dataLength > stream.tell():
-                    output.write('\xf0\xff\xff\xff')
+                    output.writeUInt16(0xfff0)
+                    output.write('\xff\xff')
                     output.writeUInt32(counter)
                     data = stream.read(0x200)
                     if len(data) < 0x200:
@@ -463,8 +400,12 @@ class FAT16(ObjectWithStream):
                     if len(temp) != temp.count('\xff'):
                         raise Exception("Jump over real data %x -> %x" % (counter, target))
                     counter = target
-            output.write('\xff\xff\xff\xff')
-            output.write('\xff\xff\xf0\xf0')
+            alignmentLength = abs(output.tell() % -0x1000)
+            if alignmentLength < 4:
+                raise Exception("Alignment error")
+            output.write('\xff' * (alignmentLength - 2))
+            output.write('\xf0\xf0')
+        self.endianity = saveEndianity
         output.seek(0, 0)
         return output
 
@@ -507,13 +448,35 @@ class FAT16(ObjectWithStream):
         output.seek(0, 0)
         return output
 
+    def findNumberOfSubBlocksInOldPadding(self):
+        self.pushOffset()
+        self.seek(0xc, 0)
+        index = self.readUInt32()
+        if 0 != index:
+            raise Exception("Invalid old padding")
+        for count in range(0x1000):
+            self.seek(count * 0x208 + 0xc)
+            index = unpack(self.paddingEndianity + 'L', self.read(4))[0]
+            if index != count:
+                break
+        if count < 8:
+            raise Exception("Number of blocks in padding is too small")
+        if count >= 0x1000:
+            raise Exception("Number of blocks in padding is too large")
+        return count
+
     def guessPaddingType(self):
-        if 'F0F00001FF000000FFF0FFFF00000000'.decode('hex') == self.peek(0x10):
-            self.printIfVerbos("Using new DCT4 padding")
-            return PADDING_TYPE_DCT4
+        result = PADDING_TYPE_NO_PADDING
         if 'F0F0010000FF0000'.decode('hex') == self.peek(0x8):
-            self.printIfVerbos("Using BB5 padding")
-            return PADDING_TYPE_BB5
+            self.printIfVerbos("Using old padding (LE)")
+            self.paddingEndianity = '<'
+            result = PADDING_TYPE_OLD
+        if 'F0F00001FF000000'.decode('hex') == self.peek(0x8):
+            self.printIfVerbos("Using old padding (BE)")
+            self.paddingEndianity = '>'
+            result = PADDING_TYPE_OLD
+        if PADDING_TYPE_OLD == result:
+            self.paddingSubBlocksInBlock = self.findNumberOfSubBlocksInOldPadding()
         self.seek(0xf800)
         if '00000000FF00FFFFFFFFFFFFFFFFFFFF'.decode('hex') == self.peek(0x10):
             self.printIfVerbos("Using new type of padding")
@@ -524,17 +487,17 @@ class FAT16(ObjectWithStream):
                 self.read(0xc)
                 lineIndex = self.readUInt32()
             self.numPeddingLines = numLines
-            return PADDING_TYPE_NEW
-        self.printIfVerbos("No padding")
-        return PADDING_TYPE_NO_PADDING
+            result = PADDING_TYPE_NEW
+        if PADDING_TYPE_NO_PADDING == result:
+            self.printIfVerbos("No padding")
+        return result
 
     def __init__(self, data, isVerbose=False):
         self.isVerbose = isVerbose
         if len(data) < 0x100:
-            self.stream  = file(data, 'rb')
+            ObjectWithStream.__init__(self, data=file(data, 'rb'), endianity='<')
         else:
-            self.stream = ObjectWithStream()
-            self.stream.write(data)
+            ObjectWithStream.__init__(self, data=data, endianity='<')
         self.seek(0, 0)
         self.paddingType = self.guessPaddingType()
         self.seek(0, 0)
@@ -542,12 +505,8 @@ class FAT16(ObjectWithStream):
             self.stream1, self.stream2 = self.removeNewPadding()
             self.stream = self.stream1
             self.seek(0, 0)
-        elif self.paddingType == PADDING_TYPE_BB5:
-            self.stream, self.jumps = self.removeBB5Padding()
-            self.seek(0, 0)
-        elif self.paddingType == PADDING_TYPE_DCT4:
-            self.stream1, self.stream2 = self.removeDCT4Padding()
-            self.stream = self.stream1
+        elif self.paddingType == PADDING_TYPE_OLD:
+            self.stream, self.jumps = self.removeOldPadding()
             self.seek(0, 0)
 
         if '\xeb\xfe' != self.peek(2):
@@ -1003,10 +962,8 @@ class FAT16(ObjectWithStream):
 
     def make(self):
         output = ObjectWithStream(self.makeNoPadding())
-        if self.paddingType == PADDING_TYPE_DCT4:
-            output = self.addDCT4Padding(output)
-        elif self.paddingType == PADDING_TYPE_BB5:
-            output = self.addBB5Padding(output, self.jumps)
+        if self.paddingType == PADDING_TYPE_OLD:
+            output = self.addOldPadding(output, self.jumps)
         elif self.paddingType == PADDING_TYPE_NEW:
             output = self.addNewPadding(output)
         output.seek(0, 0)
@@ -1210,7 +1167,7 @@ class FAT16(ObjectWithStream):
                 continue
             output += path + f.getName() + '\n'
             if f.isDir():
-                output += self.printTree(f.content, path + f.getName() + '/')
+                output += self.displayTree(f.content, path + f.getName() + '/')
         return output
 
     def dumpTree(self, outputPath, start=None, path=None):
