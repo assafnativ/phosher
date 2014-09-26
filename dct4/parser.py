@@ -37,7 +37,7 @@ class DCT4(BasicContainerParser):
         (0x0080000, 0x56e7), (0x0100000, 0xb93a), 
         (0x0200000, 0x5b21), (0x0400000, 0xa818), 
         (0x0800000, 0x0000), (0x1000000, 0xefdf) ]
-    ENCRYPTED_RANGE = (0x1000084, 0x2000000)
+    ENCRYPTED_RANGE = (0x1000084, 0x1c00000)
 
     def __init__(self, fileStream, isBigEndian, isVerbose=False):
         self.WORDS_PERM_TABLE   = scipy.array(WORDS_PERM_TABLE, scipy.uint16)
