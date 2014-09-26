@@ -61,7 +61,7 @@ def main():
         imageData = fat16.makeNoPadding()
         file(imageName, 'wb').write(imageData)
     if listFiles:
-        fat16.displayTree()
+        print fat16.displayTree()
     if writeOutput:
         nokiaFile.plain = fat16.make()
         file(outputFile, 'wb').write(nokiaFile.encode())
