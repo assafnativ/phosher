@@ -74,7 +74,7 @@ class NokiaFile(ParserInterface):
 
             # Parse things that are special for this file type
             plainAddress, self.plain = self.extractPlain()
-            printIfVerbose("Plaing loading address: 0x%x" % plainAddress, self.isVerbose)
+            printIfVerbose("Plain loading address: 0x%x" % plainAddress, self.isVerbose)
             if (plainAddress != self.address):
                 raise Exception("This scenario is not supported at the moment")
 
