@@ -40,7 +40,7 @@ class NokiaFile(ParserInterface):
             self.ObjectWithStream = ObjectWithStreamBigEndian
         else:
             self.ObjectWithStream = ObjectWithStream
-        
+
         # Make an access to the file data
         self.fileStream = self.ObjectWithStream(self.rawData)
         self.fileStream.seek(1, 0)

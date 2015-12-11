@@ -280,7 +280,7 @@ class DirEntry(ObjectWithStream):
 
     def isRootDir(self):
         return (0xff == self.attributes)
-         
+
     def isDir(self):
         return (0 != (self.attributes & 0x10))
 
@@ -510,7 +510,7 @@ class FAT16(ObjectWithStream):
             self.seek(0, 0)
 
         if '\xeb\xfe' != self.peek(2):
-            raise Exception("Data doesn't seem like FAT16")
+            raise Exception("Data don't seem like FAT16")
         self.clustersToFilesDic = {}
         self.parseHeaders()
         if (self.bytesPerSector - self.tell()) > 0:

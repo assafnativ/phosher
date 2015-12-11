@@ -11,31 +11,31 @@ import scipy
 
 class DCT4(BasicContainerParser):
     XOR_TABLE1 = [ \
-        (0x000140, 0x1000), (0x000220, 0x52a1), 
+        (0x000140, 0x1000), (0x000220, 0x52a1),
         (0x000480, 0x1221), (0x000600, 0xb928),
-        (0x000810, 0x5221), (0x000840, 0x1220), 
+        (0x000810, 0x5221), (0x000840, 0x1220),
         (0x000900, 0x2008), (0x001020, 0x1221),
-        (0x001080, 0x0908), (0x001100, 0x52a1), 
+        (0x001080, 0x0908), (0x001100, 0x52a1),
         (0x002020, 0x0100), (0x002080, 0xfbbd),
-        (0x004010, 0xa91a), (0x004040, 0xa908), 
+        (0x004010, 0xa91a), (0x004040, 0xa908),
         (0x008008, 0x2908), (0x009000, 0x1000),
-        (0x00a000, 0xbd3a), (0x010010, 0xad1a), 
+        (0x00a000, 0xbd3a), (0x010010, 0xad1a),
         (0x010040, 0x5221), (0x010400, 0x0908),
-        (0x020200, 0x53a5), (0x040040, 0xa91a), 
+        (0x020200, 0x53a5), (0x040040, 0xa91a),
         (0x044000, 0x1b20), (0x080100, 0xa918),
         (0x800000, 0xb908) ]
     XOR_TABLE2 = [ \
-        (0x0000002, 0x0fae), (0x0000004, 0x3e7f), 
-        (0x0000008, 0xc99f), (0x0000010, 0xd6f7), 
-        (0x0000020, 0xa71b), (0x0000040, 0x14c4), 
+        (0x0000002, 0x0fae), (0x0000004, 0x3e7f),
+        (0x0000008, 0xc99f), (0x0000010, 0xd6f7),
+        (0x0000020, 0xa71b), (0x0000040, 0x14c4),
         (0x0000080, 0x52a5), (0x0000100, 0xcbb1),
-        (0x0000200, 0x4285), (0x0000400, 0xefdf), 
-        (0x0000800, 0xdff7), (0x0001000, 0x5080), 
-        (0x0002000, 0xee9f), (0x0004000, 0x0000), 
+        (0x0000200, 0x4285), (0x0000400, 0xefdf),
+        (0x0000800, 0xdff7), (0x0001000, 0x5080),
+        (0x0002000, 0xee9f), (0x0004000, 0x0000),
         (0x0008000, 0x8432), (0x0010000, 0x5221),
-        (0x0020000, 0x4084), (0x0040000, 0xa91a), 
-        (0x0080000, 0x56e7), (0x0100000, 0xb93a), 
-        (0x0200000, 0x5b21), (0x0400000, 0xa818), 
+        (0x0020000, 0x4084), (0x0040000, 0xa91a),
+        (0x0080000, 0x56e7), (0x0100000, 0xb93a),
+        (0x0200000, 0x5b21), (0x0400000, 0xa818),
         (0x0800000, 0x0000), (0x1000000, 0xefdf) ]
     ENCRYPTED_RANGE = (0x1000084, 0x1c00000)
 
@@ -43,6 +43,7 @@ class DCT4(BasicContainerParser):
         self.WORDS_PERM_TABLE   = scipy.array(WORDS_PERM_TABLE, scipy.uint16)
         self.INVERS_PERM_TABLE  = scipy.array(INVERS_PERM_TABLE, scipy.uint16)
         self.fileType = 0xa2
+        self.xorAF = False
         BasicContainerParser.__init__(self, fileStream, isBigEndian, isVerbose=isVerbose)
 
     def cryptoInternal(self, data, base):
@@ -73,6 +74,7 @@ class DCT4(BasicContainerParser):
         data.byteswap(True)
         data = self.decryptChunk(data, base)
         data.byteswap(True)
+        data = scipy.bitwise_xor(data, data[-1])
         return data.tostring()
 
     def encrypt( self, data, base=0x1000084 ):
@@ -121,7 +123,7 @@ class DCT4(BasicContainerParser):
             raise Exception("Don't know how to parse blob of type %x in file type %x at offset %x" %
                             (blobType, self.fileType, pos))
 
-    def extractPlain( self, blobs ):
+    def extractPlain( self, blobs):
         address, extractedData = self.extractData(blobs)
         endAddress = address + len(extractedData)
         if address < self.ENCRYPTED_RANGE[1] and endAddress > self.ENCRYPTED_RANGE[0]:
@@ -163,7 +165,10 @@ class DCT4(BasicContainerParser):
             dataToWrite = self.ObjectWithStream()
             if encryptedDataOffset > 0:
                 dataToWrite.write(plain[:encryptedDataOffset])
-            dataToWrite.write(self.encrypt(plain[encryptedDataOffset:encryptedDataEndOffset], encryptedDataStart))
+            dataToEncrypt = plain[encryptedDataOffset:encryptedDataEndOffset]
+            if self.xorAF:
+                dataToEncrypt = ''.join([chr(ord(c) ^ 0xaf) for c in dataToEncrypt])
+            dataToWrite.write(self.encrypt(dataToEncrypt, encryptedDataStart))
             if encryptedDataEnd < endAddress:
                 dataToWrite.write(plain[encryptedDataEndOffset:])
         else:
