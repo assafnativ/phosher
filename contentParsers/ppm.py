@@ -371,8 +371,14 @@ class PPM(object):
             ppm = file(ppm, 'rb').read()
         self.ppmLength = len(ppm)
         self.data = ObjectWithStream(ppm)
-        if '\x00MPP' != self.data.read(4):
+        magic = self.data.read(4)
+        if '\x00MPP' == magic:
+            self.data = ObjectWithStream(ppm, endianity='<')
+        elif 'PPM\x00' == magic:
+            self.data = ObjectWithStream(ppm, endianity='>')
+        else:
             raise Exception("Invalid magic in PPM header")
+        magic = self.data.read(4)
         self.version = self.data.readString()
         printIfVerbose("PPM version: %s" % self.version, self.isVerbose)
         self.data.seek(0x40, 0)
@@ -396,7 +402,7 @@ class PPM(object):
         result.write(self.langId)
         for section in self.sections:
             result.write(section.toBinary())
-        
+
         return result.getRawData()
 
     def make(self):
