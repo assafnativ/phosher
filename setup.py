@@ -2,12 +2,15 @@
 import sys
 
 from distutils.core import setup
-import py2exe
+try:
+    import py2exe
+except:
+    pass
 from phosher import *
 import scipy
 
 packagesNames = [
-        'phosher', 
+        'phosher',
         'phosher\\asha',
         'phosher\\bb5',
         'phosher\\dct4',
@@ -16,7 +19,7 @@ packagesNames = [
         'phosher\\crypto',
         'phosher\\general' ]
 packagesDirs = {
-        'phosher' : '.', 
+        'phosher' : '.',
         'phosher\\asha' : "asha",
         'phosher\\bb5' : "bb5",
         'phosher\\dct4' : "dct4",
