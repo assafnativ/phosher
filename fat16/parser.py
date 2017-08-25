@@ -110,6 +110,10 @@ class DirEntry(ObjectWithStream):
             self.rawData = ""
         self.parent = parent
         self.parentCluster = None
+        if hasattr(stream, 'endianity'):
+            self.endianity = stream.endianity
+        else:
+            self.endianity = '='
 
     def __repr__(self):
         if self.name.startswith('\x00'):
