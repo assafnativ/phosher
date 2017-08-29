@@ -19,6 +19,7 @@ def main():
     userOptions.add_option("-c", "--createIma", dest="createIma",   action="store_true", help="Create FAT16 image file")
     userOptions.add_option("-w", "--imageName", dest="imageName",   type="string", help="Destination FAT16 image file")
     userOptions.add_option("-l", "--list",      dest="listFiles",   action="store_true", help="Display list of all files in image as tree")
+    userOptions.add_option("-t", "--details",   dest="detailsList", action="store_true", help="Display list of all files in image as tree with details")
     userOptions.add_option("-v", "--verbose",   dest="isVerbose",   action="store_true", help="Set verbose output on")
     userOptions.set_defaults(inputFile=None, outputFile=None, isVerbose=False)
     (options, args) = userOptions.parse_args(sys.argv[1:])
@@ -30,6 +31,7 @@ def main():
     createIma   = options.createIma
     imageName   = options.imageName
     listFiles   = options.listFiles
+    detailsList = options.detailsList
     isVerbose   = options.isVerbose
     PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose, globs=patcher)
     inputFile = cmdLineInputFile(patchesDefines, inputFile, userOptions)
@@ -61,7 +63,9 @@ def main():
         imageData = fat16.makeNoPadding()
         file(imageName, 'wb').write(imageData)
     if listFiles:
-        print fat16.displayTree()
+        print(fat16.displayTree(details=False))
+    if detailsList:
+        print(fat16.displayTree(details=True))
     if writeOutput:
         nokiaFile.plain = fat16.make()
         file(outputFile, 'wb').write(nokiaFile.encode())

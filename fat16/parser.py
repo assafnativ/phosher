@@ -1160,7 +1160,7 @@ class FAT16(ObjectWithStream):
             #print "Path not found"
             return None
 
-    def displayTree(self, start=None, path=None):
+    def displayTree(self, start=None, path=None, details=False):
         output = ''
         if None == start:
             start = self.rootDir.content
@@ -1169,9 +1169,16 @@ class FAT16(ObjectWithStream):
         for f in start:
             if f.getName() in ['.', '..']:
                 continue
+            if details:
+                output += ['-', 'R'][f.isRootDir()]
+                output += ['-', 'D'][f.isDir()]
+                output += ['-', 'L'][f.isLink()]
+                output += ' '
+                output += '%02x ' % f.attributes
+                output += '%8d ' % f.fileSize
             output += path + f.getName() + '\n'
             if f.isDir():
-                output += self.displayTree(f.content, path + f.getName() + '/')
+                output += self.displayTree(f.content, path + f.getName() + '/', details)
         return output
 
     def dumpTree(self, outputPath, start=None, path=None):

@@ -132,7 +132,7 @@ class Fat16Patcher(object):
                             accessDate=accessDate, \
                             updateTime=updateTime, \
                             updateDate=updateDate )
-                    
+
                 elif isinstance(patch, FAT_PATCH):
                     if len(patch.new_value) != len(patch.old_value):
                         raise Exception("Different length of old data and new data")
@@ -170,5 +170,5 @@ class Fat16Patcher(object):
                     fat16.createLinkToDir(path, patch.dst, patch.attrib)
                 else:
                     raise Exception("Unknown patch type %s" % repr(patch))
-                    
+
 
