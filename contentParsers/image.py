@@ -62,10 +62,17 @@ def main():
     if createIma:
         imageData = fat16.makeNoPadding()
         file(imageName, 'wb').write(imageData)
+    treeText = None
     if listFiles:
-        print(fat16.displayTree(details=False))
+        treeText = fat16.displayTree(details=False)
     if detailsList:
-        print(fat16.displayTree(details=True))
+        treeText = fat16.displayTree(details=True)
+    if treeText:
+        if outputFile:
+            with file(outputFile + '.txt', 'wb') as treeTextFile:
+                treeTextFile.write(treeText)
+        else:
+            print(treeText)
     if writeOutput:
         nokiaFile.plain = fat16.make()
         file(outputFile, 'wb').write(nokiaFile.encode())
