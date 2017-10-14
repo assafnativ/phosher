@@ -19,7 +19,7 @@ def DATA( data, base = 0, itemsInRow=0x10 ):
                 line += '%02X' % ord(line_data[t])
             elif( 1 == (t & 1) ):
                 line += '%02X ' % ord(line_data[t])
-            
+
         spacesLeft = 13 + int(itemsInRow * 2.5) + (2 * ((itemsInRow - 1)//8))
         line += ' ' * (spacesLeft - len(line))
         for t in line_data:

@@ -365,9 +365,7 @@ class FAT16(ObjectWithStream):
     def addOldPadding(self, stream, jumps=None):
         if None == jumps:
             jumps = {}
-        saveEndianity = self.endianity
-        self.endianity = self.paddingEndianity
-        output = ObjectWithStream()
+        output = ObjectWithStream(endianity=self.paddingEndianity)
         stream.seek(0, 0)
         dataLength = len(stream)
         self.paddingSubBlocksInBlock
@@ -409,7 +407,6 @@ class FAT16(ObjectWithStream):
                 raise Exception("Alignment error")
             output.write('\xff' * (alignmentLength - 2))
             output.write('\xf0\xf0')
-        self.endianity = saveEndianity
         output.seek(0, 0)
         return output
 
@@ -475,7 +472,7 @@ class FAT16(ObjectWithStream):
             self.printIfVerbos("Using old padding (LE)")
             self.paddingEndianity = '<'
             result = PADDING_TYPE_OLD
-        if 'F0F00001FF000000'.decode('hex') == self.peek(0x8):
+        elif 'F0F00001FF000000'.decode('hex') == self.peek(0x8):
             self.printIfVerbos("Using old padding (BE)")
             self.paddingEndianity = '>'
             result = PADDING_TYPE_OLD
@@ -967,9 +964,13 @@ class FAT16(ObjectWithStream):
     def make(self):
         output = ObjectWithStream(self.makeNoPadding())
         if self.paddingType == PADDING_TYPE_OLD:
+            self.printIfVerbos("Writing old padding (%s)" % ['LE', 'BE'][self.paddingEndianity == '>'])
             output = self.addOldPadding(output, self.jumps)
         elif self.paddingType == PADDING_TYPE_NEW:
+            self.printIfVerbos("Writing new padding")
             output = self.addNewPadding(output)
+        else:
+            raise Exception("Unknown padding type %r" % self.paddingType)
         output.seek(0, 0)
         return output.read()
 
