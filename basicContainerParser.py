@@ -35,6 +35,8 @@ class BasicContainerParser(ContainerParser):
         normalLength = blobData[1]
         endAddress = address + len(plain)
         blobType, blobData = blobs[-1]
+        if 0xff == blobType:
+            blobType, blobData = blobs[-2]
         blobData = list(blobData)
         currentEnd = blobData[0] + blobData[1]
         if endAddress < currentEnd:
@@ -80,27 +82,27 @@ class BasicContainerParser(ContainerParser):
 
     def writeBlobs( self, outputStream, blobs, address, plain ):
         blobs = self.updateBlobs(blobs, address, plain)
-        for blobType, blobData in blobs:
+        for blobIndex, (blobType, blobData) in enumerate(blobs):
             outputStream.writeUInt8(blobType)
-            if blobType in [0x14, 0x54, 0x5d]:
-                blobAddr    = blobData[0]
-                blobLen     = blobData[1]
-                endAddress  = blobAddr + blobLen
-                plainChunk = plain[blobAddr - address:endAddress - address]
-                cipher = self.packData(blobAddr, plainChunk)
-                if 0x14 == blobType:
-                    outputStream.write(self.createDataBlobType14(
-                        cipher, blobAddr).getRawData())
-                elif 0x54 == blobType:
-                    outputStream.write(self.createDataBlobType54(
-                        cipher, blobAddr, blobData[3], blobData[4], blobData[5], blobData[6]).getRawData())
-                elif 0x5d == blobType:
-                    outputStream.write(self.createDataBlobType5d(
-                        cipher, blobAddr, blobData[3], blobData[4], blobData[5], blobData[6], blobData[7], blobData[8]).getRawData())
-                else:
-                    raise Exception("Don't know how to produce data blob to type %x" % blobType)
+            blobAddr    = blobData[0]
+            blobLen     = blobData[1]
+            if (0xff == blobType) and (None == blobAddr) and blobIndex == (len(blobs) - 1):
+                outputStream.write('\xff' + blobData[2])
+                break
+            endAddress  = blobAddr + blobLen
+            plainChunk = plain[blobAddr - address:endAddress - address]
+            cipher = self.packData(blobAddr, plainChunk)
+            if 0x14 == blobType:
+                outputStream.write(self.createDataBlobType14(
+                    cipher, blobAddr).getRawData())
+            elif 0x54 == blobType:
+                outputStream.write(self.createDataBlobType54(
+                    cipher, blobAddr, blobData[3], blobData[4], blobData[5], blobData[6]).getRawData())
+            elif 0x5d == blobType:
+                outputStream.write(self.createDataBlobType5d(
+                    cipher, blobAddr, blobData[3], blobData[4], blobData[5], blobData[6], blobData[7], blobData[8]).getRawData())
             else:
-                raise Exception("Don't know how to encode blob of type %x" % blobType)
+                raise Exception("Don't know how to produce data blob to type %x" % blobType)
         outputStream.seek(0)
         return outputStream
 

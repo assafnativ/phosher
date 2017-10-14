@@ -33,8 +33,8 @@ def main():
     listFiles   = options.listFiles
     detailsList = options.detailsList
     isVerbose   = options.isVerbose
-    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose, globs=patcher)
-    inputFile = cmdLineInputFile(patchesDefines, inputFile, userOptions)
+    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, isVerbose, globs=patcher)
+    inputFile = cmdLineInputFile(patchesDefines, inputFile)
     outputFile = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
     if None == dumpDest:
         writeOutput = False

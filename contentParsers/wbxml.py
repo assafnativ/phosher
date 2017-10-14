@@ -334,8 +334,8 @@ def main():
     outputFile  = options.outputFile
     isText      = options.isText
     isVerbose   = options.isVerbose
-    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose)
-    inputFile = cmdLineInputFile(patchesDefines, inputFile, userOptions)
+    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, isVerbose)
+    inputFile = cmdLineInputFile(patchesDefines, inputFile)
     outputFile = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
 
     data = file(inputFile, 'rb').read()

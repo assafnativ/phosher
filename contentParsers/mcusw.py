@@ -9,7 +9,7 @@ from struct import unpack, pack
 
 def fixChecksum(base, plain, nokiaFile, isVerbose):
     endAddress = base + len(plain) - 1
-    if 0xA2== nokiaFile.fileType:
+    if 0xA2 == nokiaFile.fileType:
         # DCT-4 fix check sum
         currentEnd = unpack('>L', plain[0xfc:0xfc+4])[0]
         if currentEnd != endAddress:
@@ -37,7 +37,7 @@ def patchMcusw(base, plain, nokiaFile, patches, isVerbose):
         if (patchAddr < base):
             raise Exception("Can't write patch %s - Invalid address 0x%x (Valid addresses start at 0x%x)" % (patchName, patchAddr, base))
         if 0xa2 == nokiaFile.fileType and patchAddr > 0x1000100 and patchAddr < 0x1100100:
-            print "Warnning patching bytes at the first MB on a DCT4 firmware"
+            print("Warnning patching bytes at the first MB on a DCT4 firmware")
         newValueBin = patchValueToBin(newValue)
         newValueHex = newValueBin.encode('hex')
         patchOffset = patchAddr - base
@@ -68,6 +68,28 @@ def patchMcusw(base, plain, nokiaFile, patches, isVerbose):
             plain = plain[:patchOffset] + newValueBin + plain[patchEndOffset:]
     return plain
 
+def makeMcusw(inputFile, outputFileName, patchesFile=None, isDumpPlain=False, dumpDest=None, dontFixChecksum=False, isVerbose=False):
+    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, isVerbose)
+    inputFile   = cmdLineInputFile(patchesDefines, inputFile)
+    outputFileName  = cmdLineOutputFile(patchesDefines, outputFileName, inputFile)
+    nokiaFile = NokiaFile(inputFile, isVerbose=isVerbose)
+    plain = nokiaFile.plain
+    plainAddr = nokiaFile.address
+
+    if None != patchesFile:
+        plain = patchMcusw(plainAddr, plain, nokiaFile, PATCHES, isVerbose)
+        nokiaFile.plain = plain
+    if False == dontFixChecksum:
+        plain = fixChecksum(plainAddr, plain, nokiaFile, isVerbose)
+        nokiaFile.plain = plain
+    if isDumpPlain:
+        dumpDest = cmdLineDumpDestFile(patchesDefines, dumpDest, outputFileName, plainAddr)
+        with open(dumpDest, 'wb') as dumpFile:
+            dumpFile.write(plain)
+    mcuData = nokiaFile.encode()
+    with open(outputFileName, 'wb') as outputFile:
+        outputFile.write(mcuData)
+
 def main():
     userOptions = OptionParser()
     userOptions.add_option("-p", "--patches",   dest="patchesFile", type="string", help="Python scriptin that defines global var PATCHES. The file would be executed!")
@@ -86,24 +108,7 @@ def main():
     dumpDest    = options.dumpDest
     isVerbose   = options.isVerbose
     dontFixChecksum = options.dontFixChecksum
-    PATCHES, patchesDefines = loadPatchesFromFile(patchesFile, userOptions, isVerbose)
-    inputFile   = cmdLineInputFile(patchesDefines, inputFile, userOptions)
-    outputFile  = cmdLineOutputFile(patchesDefines, outputFile, inputFile)
-    nokiaFile = NokiaFile(inputFile, isVerbose=isVerbose)
-    plain = nokiaFile.plain
-    plainAddr = nokiaFile.address
-
-    if None != patchesFile:
-        plain = patchMcusw(plainAddr, plain, nokiaFile, PATCHES, isVerbose)
-        nokiaFile.plain = plain
-    if False == dontFixChecksum:
-        plain = fixChecksum(plainAddr, plain, nokiaFile, isVerbose)
-        nokiaFile.plain = plain
-    if isDumpPlain:
-        dumpDest = cmdLineDumpDestFile(patchesDefines, dumpDest, outputFile, plainAddr)
-        file(dumpDest, 'wb').write(plain)
-    mcuData = nokiaFile.encode()
-    file(outputFile, 'wb').write(mcuData)
+    return makeMcusw(inputFile, outputFile, patchesFile, isDumpPlain, dumpDest, dontFixChecksum, isVerbose)
 
 if __name__ == "__main__":
     main()

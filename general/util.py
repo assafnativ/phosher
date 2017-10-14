@@ -122,14 +122,14 @@ def exceptionUp(step=1):
             #print("Adding: %s" % item)
             setattr(__main__, item, l[item])
 
-def cmdLineInputFile(allGlobals, inputFile, userOptions):
+def cmdLineInputFile(allGlobals, inputFile):
     if "INPUT_FILE" not in allGlobals and None == inputFile:
-        userOptions.error("Please set the input file either in command line or in the PATCHES file")
+        raise Exception("Please set the input file either in command line or in the PATCHES file")
     if "INPUT_FILE" in allGlobals and None == inputFile:
         # Command line overwrites PATCHES file
         inputFile = allGlobals["INPUT_FILE"]
     if not os.path.isfile(inputFile):
-        userOptions.error("Invalid input file %s" % inputFile)
+        raise Exception("Invalid input file %s" % inputFile)
     return inputFile
 
 def cmdLineOutputFile(allGlobals, outputFile, inputFile):
@@ -155,10 +155,10 @@ def cmdLineDumpDestFile(allGlobals, dumpDest, outputFile, plainAddr):
         dumpDest = allGlobals['DUMP_DEST']
     return dumpDest
 
-def loadPatchesFromFile(patchesFile, userOptions, isVerbose, globs=None):
+def loadPatchesFromFile(patchesFile, isVerbose, globs=None):
     if None != patchesFile:
         if not os.path.isfile(patchesFile):
-            userOptions.error("Patches file not found")
+            raise Exception("Patches file not found")
         printIfVerbose("Exexuting Python script: %s" % patchesFile, isVerbose)
         if None == globs:
             patchesDefines = {}

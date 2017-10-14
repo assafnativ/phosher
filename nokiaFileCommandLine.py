@@ -16,7 +16,7 @@ def main():
     inputFile   = options.inputFile
     outputFile  = options.outputFile
     isVerbose   = options.isVerbose
-    inputFile = cmdLineInputFile({}, inputFile, userOptions)
+    inputFile = cmdLineInputFile({}, inputFile)
     outputFile = cmdLineOutputFile({}, outputFile, inputFile)
 
     data = file(inputFile, 'rb').read()
