@@ -211,7 +211,7 @@ class BasicContainerParser(ContainerParser):
                     base = address
                 offset = address - base
                 if result.tell() > offset:
-                    print "Overlapped blobs! (%x to %x) - Patching data" % (address, endAddress)
+                    print("Overlapped blobs! (%x to %x) - Patching data" % (address, endAddress))
                     result.seek(offset)
                 elif result.tell() < offset:
                     result.write('\xff' * (offset - result.tell()))

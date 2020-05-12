@@ -5,6 +5,7 @@ from struct import pack, unpack
 import time
 import copy
 import os
+from binascii import hexlify
 
 PADDING_TYPE_NO_PADDING = 0
 PADDING_TYPE_OLD = 1
@@ -99,7 +100,7 @@ class DirEntry(ObjectWithStream):
             self.creationTime   = info[ 4]
             self.creationDate   = info[ 5]
             self.accessDate     = info[ 6]
-            self.zero           = '\x00\x00'
+            self.zero           = b'\x00\x00'
             self.updateTime     = info[ 7]
             self.updateDate     = info[ 8]
             self.firstCluster   = info[ 9]
@@ -116,7 +117,7 @@ class DirEntry(ObjectWithStream):
             self.endianity = '='
 
     def __repr__(self):
-        if self.name.startswith('\x00'):
+        if self.name.startswith(b'\x00'):
             return "No file"
         result = ""
         result += ("%s (%s.%s)\n" % (self.longName, self.name, self.ext))
@@ -125,7 +126,7 @@ class DirEntry(ObjectWithStream):
         result += ("Creation time: %s\n" % (repr(parseFileTime(self.creationTime, self.creationMicro))))
         result += ("Creation date: %s\n" % (repr(parseFileDate(self.creationDate))))
         result += ("Last access:   %s\n" % (repr(parseFileDate(self.accessDate))))
-        result += ("Zero %s\n" % self.zero.encode('hex'))
+        result += ("Zero %s\n" % hexlify(self.zero))
         result += ("Modify time:   %s\n" % (repr(parseFileTime(self.updateTime))))
         result += ("Modify date:   %s\n" % (repr(parseFileDate(self.updateDate))))
         result += ("First cluster: 0x%x\n" % self.firstCluster)
@@ -145,7 +146,7 @@ class DirEntry(ObjectWithStream):
             folderData.write(self.makeDotEntry())
             folderData.write(self.makeDotDotEntry())
         for f in self.content:
-            if f.getName() in ['.', '..']:
+            if f.getName() in [b'.', b'..']:
                 raise Exception(". and .. were supposed to be filltered out")
             longName = f.longName
             longNameEntry = f.makeLongNameEntry()
@@ -165,7 +166,7 @@ class DirEntry(ObjectWithStream):
         if not self.isDir():
             raise Exception("File has no content")
         if 0 != self.fileSize:
-            raise Exception("How the fuck that happned?!")
+            raise Exception("How the fuck that happened?!")
         if isinstance(content, DirEntry):
             self.content = content
         elif not isinstance(content, list):
@@ -176,12 +177,12 @@ class DirEntry(ObjectWithStream):
     def makeLongNameEntry(self):
         if None == self.longName:
             return None
-        result = ''
+        result = b''
         longName = self.longName
         if 0 != (len(longName) % 26):
-            longName += '\x00\x00'
+            longName += b'\x00\x00'
         if 0 != (len(longName) % 26):
-            longName += '\xff' * (26 - (len(longName) % 26))
+            longName += b'\xff' * (26 - (len(longName) % 26))
         neededEntries = len(longName) // 26
         for i in range(neededEntries):
             pos = (neededEntries - i - 1) * 26
@@ -191,25 +192,25 @@ class DirEntry(ObjectWithStream):
             result += chr(indexByte)
             result += longName[pos:pos+10]
             pos += 10
-            result += '\x0f\x00'
+            result += b'\x0f\x00'
             result += chr(self.calcDosNameChecksum())
             result += longName[pos:pos+12]
             pos += 12
-            result += '\x00\x00'
+            result += b'\x00\x00'
             result += longName[pos:pos+4]
         return result
 
     def makeEntry(self):
-        result = ''
+        result = b''
         name = self.name
         if len(name) < 8:
             name += ' ' * (8 - len(name))
         result += name
         ext = self.ext
         if len(ext) < 3:
-            ext += ' ' * (3 - len(ext))
+            ext += b' ' * (3 - len(ext))
         result += ext
-        result += chr(self.attributes)
+        result += self.attributes.to_bytes(1, 'big')
         result += self.makeUInt8(self.longFileName)
         result += self.makeUInt8(self.creationMicro)
         result += self.makeUInt16(self.creationTime)
@@ -223,9 +224,9 @@ class DirEntry(ObjectWithStream):
         return result
 
     def makeDotEntry(self):
-        result = '.          '
-        result += chr(self.attributes)
-        result += '\x00'
+        result = b'.          '
+        result += self.attributes.to_bytes(1, 'big')
+        result += b'\x00'
         result += self.makeUInt8(self.creationMicro)
         result += self.makeUInt16(self.creationTime)
         result += self.makeUInt16(self.creationDate)
@@ -240,9 +241,9 @@ class DirEntry(ObjectWithStream):
     def makeDotDotEntry(self):
         if None == self.parent:
             raise Exception("Dir %s had no parent!" % self.name)
-        result = '..         '
-        result += chr(self.parent.attributes)
-        result += '\x00'
+        result = b'..         '
+        result += self.parent.attributes.to_bytes(1, 'big')
+        result += b'\x00'
         result += self.makeUInt8(self.parent.creationMicro)
         result += self.makeUInt16(self.parent.creationTime)
         result += self.makeUInt16(self.parent.creationDate)
@@ -278,8 +279,8 @@ class DirEntry(ObjectWithStream):
         if '' != self.longName:
             try:
                 return (self.longName).decode('UTF-16LE').encode('cp1255').strip()
-            except UnicodeEncodeError, e:
-                return "InvalidName_%s" % (self.longName.encode('hex'))
+            except UnicodeEncodeError as e:
+                return "InvalidName_%s" % (hexlify(self.longName))
         return self.name.strip()
 
     def isRootDir(self):
@@ -310,7 +311,7 @@ class FAT16(ObjectWithStream):
         self.endianity = self.paddingEndianity
         while self.tell() != dataLength:
             masterHeader = self.read(2)
-            if '\xf0\xf0' != masterHeader:
+            if b'\xf0\xf0' != masterHeader:
                 raise Exception("Master header error 1 at %x" % self.tell())
             if 1 != self.readUInt16():
                 raise Exception("Master header error 2 at %x" % self.tell())
@@ -323,17 +324,17 @@ class FAT16(ObjectWithStream):
                 isLastBlock = True
             else:
                 raise Exception("Unknown block type at %x" % self.tell())
-            if '\x00\x00' != self.read(2):
+            if b'\x00\x00' != self.read(2):
                 raise Exception("Master header error2 at %x" % self.tell())
             for i in range(self.paddingSubBlocksInBlock):
                 headerType = self.readUInt16()
                 header = self.read(2)
-                if '\xff\xff' != header:
+                if b'\xff\xff' != header:
                     raise Exception("Header error 1 at %x" % self.tell())
                 if 0xffff == headerType:
                     self.printIfVerbos("Data end at %x" % self.tell())
                     tail = self.read(dataLength - self.tell() - 0x4)
-                    if len(tail) != tail.count('\xff'):
+                    if len(tail) != tail.count(b'\xff'):
                         raise Exception("Tail error")
                     self.printIfVerbos("%x bytes in tail (%x)" % (len(tail), i))
                     break
@@ -345,7 +346,7 @@ class FAT16(ObjectWithStream):
                         raise Exception("Jump back in padding at %x" % self.tell())
                     jumps[counter] = index
                     self.printIfVerbos("Data jump from %x to %x" % (counter, index))
-                    output.write('\xff' * (0x200 * (index - counter)))
+                    output.write(b'\xff' * (0x200 * (index - counter)))
                     counter = index
                 output.write(self.read(0x200))
                 counter += 1
@@ -354,10 +355,10 @@ class FAT16(ObjectWithStream):
             if bytesLeft < 4:
                 raise Exception("Not enought bytes left")
             footer = self.read(bytesLeft)
-            if '\xf0\xf0' != footer[-2:]:
+            if b'\xf0\xf0' != footer[-2:]:
                 raise Exception("Footer error 1")
-            if len(footer) - 2 != footer.count('\xff'):
-                raise Exception("Footer error 2 (%x, %x, %x)" % (self.tell(), len(footer), footer.count('\xff')))
+            if len(footer) - 2 != footer.count(b'\xff'):
+                raise Exception("Footer error 2 (%x, %x, %x)" % (self.tell(), len(footer), footer.count(b'\xff')))
         self.endianity = saveEndianity
         output.seek(0, 0)
         return output, jumps
@@ -372,7 +373,7 @@ class FAT16(ObjectWithStream):
         dataBytesInBlock = self.paddingSubBlocksInBlock * 0x200
         counter = 0
         while stream.tell() < dataLength:
-            output.write('\xf0\xf0')
+            output.write(b'\xf0\xf0')
             output.writeUInt16(1)
             bytesLeft = (dataLength - stream.tell())
             if bytesLeft > dataBytesInBlock:
@@ -383,16 +384,16 @@ class FAT16(ObjectWithStream):
             for i in range(self.paddingSubBlocksInBlock):
                 if dataLength > stream.tell():
                     output.writeUInt16(0xfff0)
-                    output.write('\xff\xff')
+                    output.write(b'\xff\xff')
                     output.writeUInt32(counter)
                     data = stream.read(0x200)
                     if len(data) < 0x200:
-                        data = data + ('\xff' * (0x200 - len(data)))
+                        data = data + (b'\xff' * (0x200 - len(data)))
                     output.write(data)
                 else:
-                    output.write('\xff\xff\xff\xff')
-                    output.write('\xff\xff\xff\xff')
-                    output.write('\xff' * 0x200)
+                    output.write(b'\xff\xff\xff\xff')
+                    output.write(b'\xff\xff\xff\xff')
+                    output.write(b'\xff' * 0x200)
                 counter += 1
                 if counter in jumps:
                     target = jumps[counter]
@@ -405,8 +406,8 @@ class FAT16(ObjectWithStream):
             alignmentLength = abs(output.tell() % -0x1000)
             if alignmentLength < 4:
                 raise Exception("Alignment error")
-            output.write('\xff' * (alignmentLength - 2))
-            output.write('\xf0\xf0')
+            output.write(b'\xff' * (alignmentLength - 2))
+            output.write(b'\xf0\xf0')
         output.seek(0, 0)
         return output
 
@@ -435,16 +436,16 @@ class FAT16(ObjectWithStream):
             output.write(d)
             for i in range(chunk_length // lineLength):
                 output.write(pack('<L', line))
-                output.write('\xff\x00')
-                output.write('\xff' * 10)
+                output.write(b'\xff\x00')
+                output.write(b'\xff' * 10)
                 line += 1
             for i in range(self.numPeddingLines - (chunk_length // lineLength)):
-                output.write('\xff' * 32)
-            output.write('\xff' * 32)
-            output.write('\xff\xff\x00\xff')
-            output.write('\xff' * 12)
-            output.write('\xf0\xf0\x03\x00\x00\x00\xf0\xf0')
-            output.write('\xff' * 8)
+                output.write(b'\xff' * 32)
+            output.write(b'\xff' * 32)
+            output.write(b'\xff\xff\x00\xff')
+            output.write(b'\xff' * 12)
+            output.write(b'\xf0\xf0\x03\x00\x00\x00\xf0\xf0')
+            output.write(b'\xff' * 8)
             d = stream.read(0xf800)
         output.seek(0, 0)
         return output
@@ -468,18 +469,18 @@ class FAT16(ObjectWithStream):
 
     def guessPaddingType(self):
         result = PADDING_TYPE_NO_PADDING
-        if 'F0F0010000FF0000'.decode('hex') == self.peek(0x8):
+        if bytes.fromhex('F0F0010000FF0000') == self.peek(0x8):
             self.printIfVerbos("Using old padding (LE)")
             self.paddingEndianity = '<'
             result = PADDING_TYPE_OLD
-        elif 'F0F00001FF000000'.decode('hex') == self.peek(0x8):
+        elif bytes.fromhex('F0F00001FF000000') == self.peek(0x8):
             self.printIfVerbos("Using old padding (BE)")
             self.paddingEndianity = '>'
             result = PADDING_TYPE_OLD
         if PADDING_TYPE_OLD == result:
             self.paddingSubBlocksInBlock = self.findNumberOfSubBlocksInOldPadding()
         self.seek(0xf800)
-        if '00000000FF00FFFFFFFFFFFFFFFFFFFF'.decode('hex') == self.peek(0x10):
+        if bytes.fromhex('00000000FF00FFFFFFFFFFFFFFFFFFFF') == self.peek(0x10):
             self.printIfVerbos("Using new type of padding")
             numLines = 0
             lineIndex = self.readUInt32()
@@ -510,7 +511,7 @@ class FAT16(ObjectWithStream):
             self.stream, self.jumps = self.removeOldPadding()
             self.seek(0, 0)
 
-        if '\xeb\xfe' != self.peek(2):
+        if b'\xeb\xfe' != self.peek(2):
             raise Exception("Data don't seem like FAT16")
         self.clustersToFilesDic = {}
         self.parseHeaders()
@@ -545,8 +546,8 @@ class FAT16(ObjectWithStream):
         self._rootDirData = self.read(self._rootDirSize)
         self.rootDir = DirEntry( \
                 ( \
-                    '/',
-                    '   ',
+                    b'/',
+                    b'   ',
                     0xff, # Special attributes for root dir
                     0,
                     0,
@@ -555,13 +556,13 @@ class FAT16(ObjectWithStream):
                     0,
                     0,
                     -1,
-                    0), '/')
+                    0), b'/')
         content = self._parseDirAndUpdateParent(self._rootDirData, self.rootDir)
         self.rootDir.updateContent(content)
         if 0 != (self.tell() % self.bytesPerSector):
             self.rootDirPadding = self.read(abs(self.tell() % (-self.bytesPerSector)))
         else:
-            self.rootDirPadding = ''
+            self.rootDirPadding = b''
         self.dataStart = self.tell()
         self.firstDataSector = self.dataStart // self.bytesPerSector
         self.clustersToFilesDic[0] = self.rootDir
@@ -586,14 +587,14 @@ class FAT16(ObjectWithStream):
         return self.table.index(CLUSTER_AVAILABLE)
 
     def eraseCluster(self, cluster):
-        self._writeCluster(cluster, '\x00' * self.bytesPerCluster)
+        self._writeCluster(cluster, b'\x00' * self.bytesPerCluster)
         self.table[cluster] = 0
 
     def _writeCluster(self, cluster, data):
         if len(data) > self.bytesPerCluster:
             raise Exception("No room for data in cluster")
         elif len(data) < self.bytesPerCluster:
-            data += '\x00' * (self.bytesPerCluster - len(data))
+            data += b'\x00' * (self.bytesPerCluster - len(data))
         clusterOffset = self._getClusterOffset(cluster)
         self.seek(clusterOffset, 0)
         self.write(data)
@@ -602,7 +603,7 @@ class FAT16(ObjectWithStream):
         if len(data) > self._rootDirSize:
             raise Exception("No room for data in root dir")
         elif len(data) < self._rootDirSize:
-            data += '\x00' * (self.bytesPerCluster - len(data))
+            data += b'\x00' * (self.bytesPerCluster - len(data))
         self.seek(self._rootDirStart, 0)
         self.write(data)
         self._rootDirData = data
@@ -618,24 +619,24 @@ class FAT16(ObjectWithStream):
     def makeShortName(self, fname, directory=None):
         content = directory.content
         index = 0
-        extPos = fname.rfind('.')
+        extPos = fname.rfind(b'.')
         if -1 == extPos:
-            ext = '   '
+            ext = b'   '
         else:
             ext = fname[extPos+1:extPos+4]
             if len(ext) < 3:
-                ext += ' ' * (3 - len(ext))
+                ext += b' ' * (3 - len(ext))
             ext = ext.upper()
         if extPos != -1 and extPos < 6:
             fnameTemplate = fname[:extPos]
-            fnameTemplate += ' ' * (6 - len(fnameTemplate))
+            fnameTemplate += b' ' * (6 - len(fnameTemplate))
         else:
             fnameTemplate = fname[:6]
             if len(fnameTemplate) < 6:
                 fnameTemplate += ' ' * (6 - len(fnameTemplate))
             fnameTemplate = fnameTemplate.upper()
-        fnameTemplate += '~%s'
-        for i in ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P']:
+        fnameTemplate += b'~%s'
+        for i in [b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H', b'I', b'J', b'K', b'L', b'M', b'N', b'O', b'P']:
             nameToCheck = fnameTemplate % i
             found = False
             if None != directory:
@@ -647,13 +648,13 @@ class FAT16(ObjectWithStream):
         raise Exception("Failed to create short name for %s" % fname)
 
     def splitFullPath(self, fullPath):
-        fullPath = fullPath.replace('\\', '/')
-        if fullPath[-1] == '/':
+        fullPath = fullPath.replace(b'\\', b'/')
+        if fullPath[-1] == b'/':
             fullPath = fullPath[:-1]
-        pos = fullPath.rfind('/')
+        pos = fullPath.rfind(b'/')
         if -1 == pos:
             fname = fullPath
-            path = '/'
+            path = b'/'
         else:
             fname = fullPath[pos+1:]
             path = fullPath[:pos]
@@ -666,7 +667,7 @@ class FAT16(ObjectWithStream):
         if attrib & 0x10:
             raise Exception("Use mkdir to create dir")
         path, fname, fullPath = self.splitFullPath(fullPath)
-        if path in ['/', '\\', '']:
+        if path in [b'/', b'\\', b'']:
             directory = self.rootDir
         else:
             directory = self.getFileObj(path)
@@ -718,21 +719,21 @@ class FAT16(ObjectWithStream):
         otherObject = self.getFileObj(otherFile)
         firstCluster = otherObject.firstCluster
         newFileEntry = self.createFile(
-                        fullPath, 
-                        attrib=attrib, 
-                        creationMicro=creationMicro, 
-                        creationTime=creationTime, 
-                        creationDate=creationDate, 
-                        accessDate=accessDate, 
-                        updateTime=updateTime, 
+                        fullPath,
+                        attrib=attrib,
+                        creationMicro=creationMicro,
+                        creationTime=creationTime,
+                        creationDate=creationDate,
+                        accessDate=accessDate,
+                        updateTime=updateTime,
                         updateDate=updateDate )
         if None == prefixData:
-            prefixData = ""
+            prefixData = b""
         else:
             if len(prefixData) % self.bytesPerCluster:
-                prefixData += "\x00" * (self.bytesPerCluster - (len(prefixData) % self.bytesPerCluster))
+                prefixData += b"\x00" * (self.bytesPerCluster - (len(prefixData) % self.bytesPerCluster))
         self.writeFile(fullPath, prefixData)
-        
+
         clusters = self.getClustersChain(newFileEntry.firstCluster)
         # Make the link
         self.table[clusters[-1]] = otherObject.firstCluster
@@ -745,7 +746,7 @@ class FAT16(ObjectWithStream):
         if None == otherObject:
             raise Exception("Link target not found")
         firstCluster = otherObject.firstCluster
-        print "Creating link from %s to %s" % (fullPath, otherPath)
+        print("Creating link from %s to %s" % (fullPath, otherPath))
         self.mkdir(
             fullPath, 
             content=otherObject,
@@ -760,19 +761,19 @@ class FAT16(ObjectWithStream):
 
     def _deleteDirContent(self, path, dirObj):
         if not hasattr(dirObj, 'content'):
-            print "Parsing error! the folder %s %s has no content" % (path, dirObj.getName())
+            print("Parsing error! the folder %s %s has no content" % (path, dirObj.getName()))
             return
         content = [x.getName() for x in dirObj.content]
         for subFile in content:
-            if subFile not in ['.', '..']:
-                self.rmfile(path + '/' + subFile)
+            if subFile not in [b'.', b'..']:
+                self.rmfile(path + b'/' + subFile)
 
     def rmfile(self, fullPath):
         path, fname, fullPath = self.splitFullPath(fullPath)
         directory = self.getFileObj(path)
         if None == directory:
             raise Exception("Can't find directory %s for deleting of %s" % (path, fname))
-        if '*' == fname:
+        if b'*' == fname:
             self._deleteDirContent(path, directory)
         else:
             for fileObj in directory.content:
@@ -782,7 +783,7 @@ class FAT16(ObjectWithStream):
                 raise Exception("File %s/%s not found" % (path, fname))
             if fileObj.isDir():
                 # Recursivly delete all files in dir
-                self._deleteDirContent(path + '/' + fname, fileObj)
+                self._deleteDirContent(path + b'/' + fname, fileObj)
             content = directory.content
             if fileObj not in content:
                 raise Exception("File not found")
@@ -828,7 +829,7 @@ class FAT16(ObjectWithStream):
         newDirEntry = self._newDirEntry( \
                 ( \
                     shortName,
-                    ext, 
+                    ext,
                     attrib,
                     creationMicro,
                     creationTime,
@@ -888,7 +889,7 @@ class FAT16(ObjectWithStream):
         return clusters
 
     def writeFile(self, fullPath, data=None):
-        if fullPath in ['\\', '/', '']:
+        if fullPath in [b'\\', b'/', b'']:
             raise Exception("Error path is root dir")
         path, fname, fullPath = self.splitFullPath(fullPath)
         fileObj = self.getFileObj(fullPath)
@@ -952,7 +953,7 @@ class FAT16(ObjectWithStream):
             rootDirRawLength += (self.bytesPerSector - (rootDirRawLength % self.bytesPerSector))
         rootDirRaw = self.rootDir.toRaw()
         if len(rootDirRaw) < rootDirRawLength:
-            rootDirRaw += '\x00' * (rootDirRawLength - len(rootDirRaw))
+            rootDirRaw += b'\x00' * (rootDirRawLength - len(rootDirRaw))
         output.write(rootDirRaw)
 
         self.seek(self.dataStart)
@@ -977,14 +978,14 @@ class FAT16(ObjectWithStream):
     def readPadding(self, paddingLength):
         if 0 != paddingLength:
             paddingZero = self.read(paddingLength)
-            if paddingZero.count('\x00') != paddingLength:
+            if paddingZero.count(b'\x00') != paddingLength:
                 raise Exception("Padded image error")
 
     def readModPadding(self, paddingMod=0x200):
         paddingLength = abs(self.tell() % (-paddingMod))
         if 0 != paddingLength:
             paddingZero = self.read(paddingLength)
-            if paddingZero.count('\x00') != paddingLength:
+            if paddingZero.count(b'\x00') != paddingLength:
                 raise Exception("Padded image error")
 
     def getClustersChain(self, firstCluster):
@@ -1012,10 +1013,10 @@ class FAT16(ObjectWithStream):
     def _readFilesRecursively(self, dirObj):
         directory = dirObj.content
         for f in directory:
-            if '\xe5' == f.name[0]:
+            if b'\xe5' == f.name[0]:
                 # File is deleted
                 continue
-            if f.getName() in ['.', '..']:
+            if f.getName() in [b'.', b'..']:
                 raise Exception("Dot and DotDot were supposed to be filtered out")
             entryData = self.readFileByCluster(f.firstCluster)
             if None != entryData:
@@ -1036,7 +1037,7 @@ class FAT16(ObjectWithStream):
 
     def _getClusterOffset(self, x):
         return self.dataStart + ((x - 2) * self.bytesPerCluster)
-                
+
     def _readCluster(self, x):
         clusterOffset = self._getClusterOffset(x)
         self.seek(clusterOffset, 0)
@@ -1045,10 +1046,10 @@ class FAT16(ObjectWithStream):
     def _resolveParents(self, dirObj):
         if not dirObj.isDir():
             return
-        if '\xe5' == dirObj.name[0]:
+        if b'\xe5' == dirObj.name[0]:
             # Folder is deleted
             return
-        if '/' != dirObj.name and None == dirObj.parent:
+        if b'/' != dirObj.name and None == dirObj.parent:
             if dirObj.parentCluster not in self.clustersToFilesDic:
                 raise Exception("Can't resolve dirName for %s %s %s" % (dirObj.name, dirObj.getName(), repr(dirObj.parentCluster)))
             parent = self.clustersToFilesDic[dirObj.parentCluster]
@@ -1060,52 +1061,52 @@ class FAT16(ObjectWithStream):
             self._resolveParents(f)
 
     def _parseDirAndUpdateParent(self, dirData, dirObj):
-        if isinstance(dirData, str):
+        if isinstance(dirData, bytes):
             stream = ObjectWithStream(dirData)
         else:
             stream = dirData
         lastNameIndex = 0
-        longName = ''
+        longName = b''
         result = []
         while True:
             entryType = stream.read(15)
             if 0 == len(entryType):
                 break
             stream.seek(-15, 1)
-            if '\x0f\x00' != entryType[-4:-2] and '\x00\x00\x00\x00' != entryType[-4:]:
+            if b'\x0f\x00' != entryType[-4:-2] and b'\x00\x00\x00\x00' != entryType[-4:]:
                 #self.printIfVerbos("File at 0x%x" % stream.tell())
                 if '' != longName:
-                    endPos = longName.find('\xff\xff')
+                    endPos = longName.find(b'\xff\xff')
                     if -1 != endPos:
                         longName = longName[:endPos]
-                    longName = longName.replace('\x00\x00', '')
+                    longName = longName.replace(b'\x00\x00', b'')
                 dirEntry = DirEntry(stream, longName)
-                if dirEntry.name[0] in ['\x00', '\xff', '\xe5', ' ']:
+                if dirEntry.name[0] in [b'\x00', b'\xff', b'\xe5', b' ']:
                     self.printIfVerbos( "File ?%s is deleted" % dirEntry.name[1:] )
-                    if '' != longName:
+                    if b'' != longName:
                         self.printIfVerbos("It had long name of %s" % longName)
-                elif dirEntry.getName() == '.':
+                elif dirEntry.getName() == b'.':
                     pass
-                elif dirEntry.getName() == '..':
-                    #print "Found parent for %s" % dirObj.getName()
+                elif dirEntry.getName() == b'..':
+                    #print("Found parent for %s" % dirObj.getName())
                     dirObj.parentCluster = dirEntry.firstCluster
                 else:
                     if dirEntry.firstCluster in self.clustersToFilesDic:
                         #raise Exception("Double definition for dir %x %s" % (dirEntry.firstCluster, dirEntry.getName()))
-                        print "Found link: %s" % dirEntry.getName()
+                        print("Found link: %s" % dirEntry.getName())
                     self.addEntryToCluesterToFilesDic(dirEntry.firstCluster, dirEntry)
                     result.append(dirEntry)
                 #self.printIfVerbos(repr(dirEntry))
                 longName = ''
                 lastNameIndex = 0
-            elif '\x0f\x00' == entryType[-4:-2]:
+            elif b'\x0f\x00' == entryType[-4:-2]:
                 # Long file name
                 lfn = LongFileNameEntry(stream)
                 index = lfn.partIndex - 0x40
                 if index > lastNameIndex:
-                    if '' != longName:
-                        self.printIfVerbos("! Long name not used %s (%x, %x) - Might be reminings of some deleted file" % (longName, index, lastNameIndex))
-                    longName = ''
+                    if b'' != longName:
+                        self.printIfVerbos("! Long name not used %s (%x, %x) - Might be remainings of some deleted file" % (longName, index, lastNameIndex))
+                    longName = b''
                 longName = lfn.name + longName
             else:
                 emptyEntry = stream.read(0x20)
@@ -1114,18 +1115,18 @@ class FAT16(ObjectWithStream):
     def ls(self, path=None, root=None):
         if None == root:
             root = self.rootDir
-        if None != path and '' != path and path[0] in ['/', '\\']:
+        if None != path and b'' != path and path[0] in [b'/', b'\\']:
             path = path[1:]
-        if '' == path or None == path:
+        if b'' == path or None == path:
             for i, f in enumerate(root):
                 if f.isDir():
-                    print '%4i [%s]' % (i, f.getName())
+                    print('%4i [%s]' % (i, f.getName()))
                 else:
-                    print '%4i %s %d' % (i, f.getName(), f.fileSize)
+                    print('%4i %s %d' % (i, f.getName(), f.fileSize))
         else:
-            pos = path.find('/')
+            pos = path.find(b'/')
             if -1 == pos:
-                pos = path.find('\\')
+                pos = path.find(b'\\')
                 if -1 == pos:
                     pos = len(path)
             next_dir = path[:pos]
@@ -1135,30 +1136,30 @@ class FAT16(ObjectWithStream):
                     self.ls(path, f.content)
                     break
             else:
-                print "Path not found"
+                print("Path not found")
 
     def getFileObj(self, path, root=None):
         if None == root:
             root = self.rootDir.content
-            if path in ['/', '\\', '']:
+            if path in [b'/', b'\\', b'']:
                 return self.rootDir
-        if '' != path and path[0] in ['/', '\\']:
+        if b'' != path and path[0] in [b'/', b'\\']:
             path = path[1:]
-        pos = path.find('/')
+        pos = path.find(b'/')
         if -1 == pos:
-            pos = path.find('\\')
+            pos = path.find(b'\\')
             if -1 == pos:
                 pos = len(path)
         next_dir = path[:pos]
         path = path[pos:]
         for f in root:
             if f.getName() == next_dir:
-                if '' == path:
+                if b'' == path:
                     return f
                 else:
                     return self.getFileObj(path, f.content)
         else:
-            #print "Path not found"
+            #print("Path not found")
             return None
 
     def displayTree(self, start=None, path=None, details=False):
@@ -1166,9 +1167,9 @@ class FAT16(ObjectWithStream):
         if None == start:
             start = self.rootDir.content
         if None == path:
-            path = '/'
+            path = b'/'
         for f in start:
-            if f.getName() in ['.', '..']:
+            if f.getName() in [b'.', b'..']:
                 continue
             if details:
                 output += ['-', 'R'][f.isRootDir()]
@@ -1177,37 +1178,37 @@ class FAT16(ObjectWithStream):
                 output += ' '
                 output += '%02x ' % f.attributes
                 output += '%8d ' % f.fileSize
-            output += path + f.getName() + '\n'
+            output += path.decode('utf8') + f.getName().decode('utf8') + '\n'
             if f.isDir():
                 output += self.displayTree(f.content, path + f.getName() + '/', details)
         return output
 
     def dumpTree(self, outputPath, start=None, path=None):
-        if outputPath[-1] not in ['/', '\\']:
-            outputPath += '/'
+        if outputPath[-1] not in [b'/', b'\\']:
+            outputPath += b'/'
         if not os.path.isdir(outputPath):
             os.mkdir(outputPath)
         if None == start:
             start = self.rootDir.content
         if None == path:
-            path = '/'
+            path = b'/'
         for f in start:
-            if f.getName() in ['.', '..']:
+            if f.getName() in [b'.', b'..']:
                 continue
             if f.isDir():
                 new_path = path + f.getName()
-                if new_path[-1] not in ['/', '\\']:
-                    new_path += '/'
+                if new_path[-1] not in [b'/', b'\\']:
+                    new_path += b'/'
                 os.mkdir(outputPath + new_path)
                 self.dumpTree(outputPath, f.content, new_path)
             else:
                 fname = outputPath + path + f.getName()
-                print fname
+                print(fname)
                 file(fname, 'wb').write(f.rawData)
 
     def printIfVerbos(self, text):
         if self.isVerbose:
-            print text
+            print(text)
 
     def parseHeaders(self):
         self.jumpOpcode      = self.read(2)            #   0
@@ -1229,21 +1230,21 @@ class FAT16(ObjectWithStream):
         else:
             self.extendedTotalSecotrs = self.readUInt32()
         if self.isVerbose:
-            print 'Jump Opcode: ' + self.jumpOpcode.encode('hex')
-            print 'NOP Opcode: ' + self.nopOpcode.encode('hex')
-            print 'OEM name: ' + self.oemName
-            print 'Bytes per sector (0x200): 0x%x' % self.bytesPerSector
-            print 'Sectors per cluster (Supposed to be a power of 2): 0x%x' % self.sectorsPerCluster
-            print 'Reserver sectors count (1 to 0x80): 0x%x' % self.reserverSectorsCount
-            print 'Num of tables (2): 0x%x' % self.numOfTables
-            print 'Max num of root dirs (224): 0x%x' % self.maxRootEntries
-            print 'Total sectors (Zero is ok): 0x%x' % self.totalSectors
-            print 'Media descriptor (0xF?): 0x%x' % self.mediaDescriptor
-            print 'Sectors per FAT: 0x%x' % self.sectorsPerFAT
-            print 'Sectors per track: 0x%x' % self.sectorsPerTrack
-            print 'Number of heads: 0x%x' % self.numOfHeads
-            print 'Hidden sectors: 0x%x' % self.hiddenSectors
-            print 'Total sectors: 0x%x' % self.totalSectors
+            print('Jump Opcode: ' + hexlify(self.jumpOpcode))
+            print('NOP Opcode: ' + hexlify(self.nopOpcode))
+            print('OEM name: ' + self.oemName.encode('utf8'))
+            print('Bytes per sector (0x200): 0x%x' % self.bytesPerSector)
+            print('Sectors per cluster (Supposed to be a power of 2): 0x%x' % self.sectorsPerCluster)
+            print('Reserved sectors count (1 to 0x80): 0x%x' % self.reserverSectorsCount)
+            print('Num of tables (2): 0x%x' % self.numOfTables)
+            print('Max num of root dirs (224): 0x%x' % self.maxRootEntries)
+            print('Total sectors (Zero is OK): 0x%x' % self.totalSectors)
+            print('Media descriptor (0xF?): 0x%x' % self.mediaDescriptor)
+            print('Sectors per FAT: 0x%x' % self.sectorsPerFAT)
+            print('Sectors per track: 0x%x' % self.sectorsPerTrack)
+            print('Number of heads: 0x%x' % self.numOfHeads)
+            print('Hidden sectors: 0x%x' % self.hiddenSectors)
+            print('Total sectors: 0x%x' % self.totalSectors)
 
         # Extended BIOS parameter block
         self.printIfVerbos( '--- Extended BIOS parameter block ---')
@@ -1256,13 +1257,13 @@ class FAT16(ObjectWithStream):
         self.bootCode            = self.read(448)     #  62
         self.bootSectorSig       = self.readUInt16()
         if self.isVerbose:
-            print 'Physical drive number (0 to 0x80): 0x%x' % self.physicalDriveNum
-            print 'Reserved: 0x%x' % self.reserved
-            print 'Extended boot signature: 0x%x' % self.extendedBootSig
-            print 'ID: 0x%x' % self.diskId
-            print 'Volume Label: ' + self.volumeLabel
-            print 'Fat type: ' + self.fatType
-            print 'Boot sector signature (0x55 0xAA): 0x%x' % self.bootSectorSig
+            print('Physical drive number (0 to 0x80): 0x%x' % self.physicalDriveNum)
+            print('Reserved: 0x%x' % self.reserved)
+            print('Extended boot signature: 0x%x' % self.extendedBootSig)
+            print('ID: 0x%x' % self.diskId)
+            print('Volume Label: ' + self.volumeLabel)
+            print('Fat type: ' + self.fatType)
+            print('Boot sector signature (0x55 0xAA): 0x%x' % self.bootSectorSig)
 
 
 # Data start = first_root_sec + size_root-dir

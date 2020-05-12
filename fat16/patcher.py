@@ -62,8 +62,8 @@ class Fat16Patcher(object):
                 if isinstance(patch, FAT_DELETE):
                     try:
                         fat16.rmfile(path)
-                    except Exception, e:
-                        print ("File %s not exists" % path)
+                    except Exception as e:
+                        print("File %s not exists" % path)
                         if not patch.ignoreMissing:
                             raise e
                 elif isinstance(patch, FAT_NEW_DATA):
@@ -142,7 +142,7 @@ class Fat16Patcher(object):
                     new_data  = old_data[:patch.offset]
                     new_data += patch.new_value
                     new_data += old_data[patch.offset + len(patch.new_value):]
-                    print "Patching %s -> %s" % (patch.old_value.encode('hex'), patch.new_value.encode('hex'))
+                    print("Patching %s -> %s" % (patch.old_value.encode('hex'), patch.new_value.encode('hex')))
                     fat16.writeFile(path, new_data)
                 elif isinstance(patch, FAT_FIX_JAD):
                     dir_path, fname = self.splitDirNameFname(path)

@@ -20,14 +20,14 @@ else:
 def parseManifest(fname):
     lines = file(fname, 'r').readlines()
     lines = [l.strip() for l in lines]
-    lines = filter(None, lines)
+    lines = [_f for _f in lines if _f]
     manifest = dict([tuple(x.split(':')) for x in lines])
     return manifest
 
 def createJar(src_dir, out_file, method='pyzip', files_list=None):
     if os.path.isfile(out_file):
         os.remove(out_file)
-    if 'pyzip' == method and isinstance(out_file, (str, unicode)):
+    if 'pyzip' == method and isinstance(out_file, str):
         out_file = zipfile.ZipFile(out_file, 'w')
         needToClose = True
     else:
@@ -87,7 +87,7 @@ def jarAddFile(zip_file, fname, in_zip_name=None, compress=True, method='pyzip',
             base = os.path.basename(fname)
             if isFolder:
                 base += '/'
-            in_zip_name = unicode(inter + base)
+            in_zip_name = str(inter + base)
         else:
             base = in_zip_name
         info = zipfile.ZipInfo(in_zip_name)
@@ -127,7 +127,7 @@ def jarAddFile(zip_file, fname, in_zip_name=None, compress=True, method='pyzip',
         else:
             method = '0'
         cmd = '%s a -tzip -scsUTF-8 -mcu -mx%s %s %s >nul' % (ZIP7_PATH, method, zip_file, fname)
-        print "Executing: %s" % cmd
+        print(("Executing: %s" % cmd))
         os.system(cmd)
     elif 'zip' == method:
         if compress:
@@ -137,7 +137,7 @@ def jarAddFile(zip_file, fname, in_zip_name=None, compress=True, method='pyzip',
         dirname = os.path.dirname(fname)
         basename = os.path.basename(fname)
         cmd = '%s %s -r -UN=UTF8 %s %s' % (ZIP_PATH, method, zip_file, basename)
-        print "Executing: %s" % cmd
+        print(("Executing: %s" % cmd))
         Popen(cmd, shell=True, cwd=dirname).communicate()
     else:
         raise Exception("Unknown method")
@@ -146,23 +146,23 @@ def compareZips(z1, z2):
     z1 = zipfile.ZipFile(z1)
     z2 = zipfile.ZipFile(z2)
     if len(z1.filelist) != len(z2.filelist):
-        print "Not same number of files!"
+        print("Not same number of files!")
         return
     for i in range(len(z1.filelist)):
         f1 = z1.filelist[i]
         f2 = z2.filelist[i]
         if f1.filename != f2.filename:
-            print 'Name mismatch', f1.filename, f2.filename
+            print(('Name mismatch', f1.filename, f2.filename))
             continue
         if f1.create_system != f2.create_system:
-            print 'Create system mismatch', f1.filename
+            print(('Create system mismatch', f1.filename))
         if f1.file_size != f2.file_size:
-            print 'File size mismatch', f1.filename
+            print(('File size mismatch', f1.filename))
         if f1.compress_size != f2.compress_size:
-            print 'Compress size mismatch', f1.filename
+            print('Compress size mismatch', f1.filename)
         if f1.CRC != f2.CRC:
-            print 'CRC mismatch', f1.filename
+            print('CRC mismatch', f1.filename)
         if f1.external_attr != f2.external_attr:
-            print 'External attr mismatch', f1.filename
+            print('External attr mismatch', f1.filename)
         if f1.flag_bits != f2.flag_bits:
-            print 'Flag bits mismatch', f1.filename
+            print('Flag bits mismatch', f1.filename)

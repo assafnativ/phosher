@@ -81,11 +81,11 @@ def patchImage(imageFile, fat16patches, isXGold=False):
     file(new_name + '.fat16.ima', 'wb').write(fat16raw)
     newBlob = blobHeader + fat16raw
     blobs[blobIndex] = (0xc, newBlob)
-    print "Writing result to %s" % new_name
+    print("Writing result to %s" % new_name)
     file(new_name, 'wb').write(makeXGoldPack(blobs, version))
-    print "Done, it took %d sec" % (time.time() - startTime)
+    print("Done, it took %d sec" % (time.time() - startTime))
     return new_name
-   
+
 def patchPPM(ppmFile, ppmPatches):
     startTime = time.time()
     ppm = PPM()
@@ -95,8 +95,8 @@ def patchPPM(ppmFile, ppmPatches):
     if -1 == pos:
         pos = len(imageFile)
     new_name = ppmFile[:pos] + '.patched' + ppmFile[pos:]
-    print "Writing result to %s" % new_name
+    print("Writing result to %s" % new_name)
     ppm.make(new_name, containerType='XGold')
-    print "Done, it took %d sec" % (time.time() - startTime)
+    print("Done, it took %d sec" % (time.time() - startTime))
     return new_name
 
