@@ -57,12 +57,12 @@ class DCT4(BasicContainerParser):
     def decryptChunk( self, data, base=0x1000084 ):
         data = self.cryptoInternal(data, base)
         data = self.WORDS_PERM_TABLE[data]
-        xorVal = data[0] ^ 0xffff
+        xorVal = data[0] ^ 0xffff   # On some old version it's also Xored with 0xbabe
         data ^= xorVal
         return data
 
     def encryptChunk( self, data, base=0x1000084 ):
-        data ^= 0x8a1b
+        data ^= 0x8a1b  # On some old version it's also Xored with 0xbabe
         data = self.INVERS_PERM_TABLE[data]
         data = self.cryptoInternal(data, base)
         return data
