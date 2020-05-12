@@ -1,14 +1,14 @@
 
-import cStringIO
+from io import BytesIO
 from struct import pack, unpack
 
 class ObjectWithStream(object):
     def __init__(self, data=None, endianity='<'):
         self.endianity = endianity
         if None == data:
-            self.stream = cStringIO.StringIO()
+            self.stream = BytesIO()
         elif isinstance(data, str):
-            self.stream = cStringIO.StringIO(data)
+            self.stream = BytesIO.BytesIO(data)
             self.stream.seek(0)
         else:
             self.stream = data
@@ -77,7 +77,7 @@ class ObjectWithStream(object):
                 nextByte = nextByte[::-1]
         else:
             nextByte = self.stream.read(1)
-        while nextByte not in ['\x00', '\x00\x00']:
+        while nextByte not in [b'\x00', b'\x00\x00']:
             result += nextByte
             if isUTF16:
                 nextByte = self.stream.read(2)

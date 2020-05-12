@@ -4,10 +4,10 @@ import sys
 import shutil
 from optparse import OptionParser
 
-from phosher.nokiaFile import NokiaFile
-from phosher.fat16.parser import parseImage as parseFAT16
-from phosher.fat16 import patcher
-from phosher.general.util import *
+from ..nokiaFile import NokiaFile
+from ..fat16.parser import parseImage as parseFAT16
+from ..fat16 import patcher
+from ..general.util import *
 
 def main():
     userOptions = OptionParser()

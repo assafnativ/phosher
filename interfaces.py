@@ -1,9 +1,8 @@
 
 from abc import ABCMeta, abstractmethod
 
-class ParserInterface( object ):
+class ParserInterface( object, metaclass=ABCMeta ):
     """ Pure Interface for Parser """
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def __init__(self):
@@ -30,9 +29,8 @@ class ParserInterface( object ):
         """ Pure virtual """
         raise NotImplementedError("Pure function call")
 
-class ContainerParser( object ):
+class ContainerParser( object, metaclass=ABCMeta ):
     """ Pure Interface for Parser """
-    __metaclass__ = ABCMeta
 
     @abstractmethod
     def __init__(self, fileStream, isBigEndian, isVerbose):

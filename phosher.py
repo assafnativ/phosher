@@ -1,14 +1,14 @@
 
-import phosher.contentParsers as contentParsers
-from phosher.contentParsers import *
+from .contentParsers import __all__ as parsersList
+from .contentParsers import *
 import sys
 
-PARSERS = [parser for parser in contentParsers.__all__ if '__' not in parser]
+PARSERS = [parser for parser in parsersList if '__' not in parser]
 
 def printSyntaxAndExit():
-    print "Please choose parser from the list:"
+    print("Please choose parser from the list:")
     for parser in PARSERS:
-        print "\t%s" % parser
+        print("\t%s" % parser)
     sys.exit(1)
 
 def main():

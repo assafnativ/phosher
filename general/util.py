@@ -5,7 +5,7 @@ import struct
 
 def printIfVerbose( text, isVerbose ):
     if isVerbose:
-        print text
+        print(text)
 
 def DATA( data, base = 0, itemsInRow=0x10 ):
     result = ''

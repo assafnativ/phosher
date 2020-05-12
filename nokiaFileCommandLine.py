@@ -3,8 +3,8 @@ import os
 import sys
 from optparse import OptionParser
 
-from phosher.nokiaFile import NokiaFile
-from phosher.general.util import *
+from .phosher.nokiaFile import NokiaFile
+from .phosher.general.util import *
 
 def main():
     userOptions = OptionParser()
